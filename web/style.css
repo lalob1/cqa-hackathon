@@ -165,7 +165,6 @@ textarea { resize: vertical; min-height: 4rem; }
 .role-operator { border-color: #527bc6; background: linear-gradient(155deg, #4f7dd5, #2c54a1); color: #f1f7ff; box-shadow: 0 2px 0 #244782, inset 0 1px #b4d2ff88; }
 .role-bot, .role-system { border-color: #bdc8db; background: linear-gradient(155deg, #f0f3f8, #dce4ef); color: #4c617e; box-shadow: 0 2px 0 #aab8ca, inset 0 1px #fff9; }
 .quality-heading { display: flex; align-items: center; gap: .7rem; }
-.quality-heading .eyebrow { margin-bottom: .2rem; }
 .quality-icon { width: 2.65rem; height: 2.65rem; flex: none; border-color: #448f8f; color: #f0fffd; background: linear-gradient(155deg, #48a9a7, #237c80); box-shadow: 0 2px 0 #1d686c, inset 0 1px #a1f0e488; }
 .glyph-halo, .glyph-head, .glyph-cups { transform-box: fill-box; transform-origin: center; }
 [data-motion="on"] .turn:nth-child(1 of .client) .glyph-halo { animation: avatar-halo 4.8s ease-in-out infinite; }
