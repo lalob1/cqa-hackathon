@@ -5,7 +5,8 @@ import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
 
-from engine import DEFAULT_RUBRIC, ROOT, ModelError, calculate, extract_records, model_name, score_conversation, validate_rubric
+from engine import (DEFAULT_RUBRIC, ROOT, ModelError, calculate, extract_records, model_name,
+                    score_conversation, validate_batch_results, validate_rubric)
 
 WEB = ROOT / "web"
 MAX_BODY = 8 * 1024 * 1024
@@ -64,6 +65,8 @@ class Handler(BaseHTTPRequestHandler):
             path = urlsplit(self.path).path
             if path == "/api/import":
                 result = extract_records(body.get("payload"))
+            elif path == "/api/import-results":
+                result = validate_batch_results(body.get("payload"), body.get("records"))
             elif path == "/api/rubric":
                 result = validate_rubric(body.get("rubric"))
             elif path == "/api/score":

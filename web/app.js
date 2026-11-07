@@ -66,6 +66,43 @@ async function importPayload(payload, label) {
   persist(label + " · новых диалогов " + additions.length);
 }
 
+function runKey(audit) {
+  return JSON.stringify([audit.input_sha256, audit.rubric_sha256, audit.provider, audit.model, audit.prompt, audit.created_at]);
+}
+
+async function importResults(payload) {
+  if (busy) return;
+  const ids = new Set(Array.isArray(payload?.results) ? payload.results.map((row) => row?.conversation_id) : []);
+  const records = workspace.records.filter((record) => ids.has(record.conversation_id));
+  if (!records.length && ids.size) throw new Error("Сначала загрузите соответствующие диалоги.");
+  const checked = await api("/api/import-results", {payload, records});
+  if (busy) return;
+  const indexes = new Map(workspace.records.map((record, index) => [record.conversation_id, index]));
+  let added = 0;
+  for (const result of checked.results) {
+    const index = indexes.get(result.conversation_id);
+    const runs = workspace.runs[index] ??= [];
+    if (runs.some((run) => runKey(run.original.audit) === runKey(result.audit))) continue;
+    runs.push({original: result, appeals: {}, source: "batch"});
+    added += 1;
+  }
+  $("filter").value = "";
+  selectRecord(indexes.get(checked.results[0].conversation_id));
+  persist("Добавлено оценок: " + added + " · ошибок в пакете: " + checked.failed);
+}
+
+function handleUpload(id, importFile) {
+  const input = $(id);
+  input.addEventListener("change", async () => {
+    const file = input.files[0];
+    try {
+      if (file?.size > 7 * 1024 * 1024) throw new Error("Файл должен быть до 7 МБ.");
+      if (file) await importFile(JSON.parse((await file.text()).replace(/^\uFEFF/, "")));
+    } catch (error) { status(error.message, true); }
+    input.value = "";
+  });
+}
+
 function renderList() {
   const list = $("conversation-list");
   const search = $("filter").value.toLowerCase().trim();
@@ -76,7 +113,9 @@ function renderList() {
     const button = node("button", conversation.conversation_id, "record");
     button.type = "button";
     button.setAttribute("aria-current", String(index === selected));
-    button.append(node("small", conversation.language + " · " + (conversation.channel === "voice call" ? "Звонок" : "Чат")));
+    const channel = conversation.channel === "voice call" ? "Звонок" : "Чат";
+    const scored = workspace.runs[index]?.length ? " · Есть оценка" : "";
+    button.append(node("small", conversation.language + " · " + channel + scored));
     button.addEventListener("click", () => selectRecord(index));
     list.append(button);
   }
@@ -227,7 +266,8 @@ function renderResult(openCriterion) {
   const sections = node("ul", undefined, "section-list");
   for (const [name, row] of Object.entries(final.sections)) sections.append(node("li", name + " · " + scoreText(row.points) + " / " + scoreText(row.max)));
   if (sections.childElementCount) pane.append(sections);
-  pane.append(node("p", original.audit.model + " · чек-лист " + original.audit.rubric_sha256.slice(0, 8) + " · вход " + original.audit.input_sha256.slice(0, 8), "meta"));
+  const source = run.source === "batch" ? "Импорт из CLI" : "Запуск в приложении";
+  pane.append(node("p", source + " · " + original.audit.model + " · чек-лист " + original.audit.rubric_sha256.slice(0, 8) + " · вход " + original.audit.input_sha256.slice(0, 8), "meta"));
   for (const item of original.rubric) pane.append(renderCriterion(run, item, final, openCriterion === item.id));
 }
 
@@ -320,14 +360,8 @@ async function boot() {
   if (!workspace.records.length) await importPayload(await api("/synthetic.json"), "Синтетические примеры загружены");
   $("filter").addEventListener("input", renderList);
   $("history").addEventListener("change", () => { historyIndex = Number($("history").value); renderResult(); });
-  $("upload").addEventListener("change", async () => {
-    const file = $("upload").files[0];
-    try {
-      if (file?.size > 7 * 1024 * 1024) throw new Error("Файл должен быть до 7 МБ.");
-      if (file) await importPayload(JSON.parse((await file.text()).replace(/^\uFEFF/, "")), "Данные загружены");
-    } catch (error) { status(error.message, true); }
-    $("upload").value = "";
-  });
+  handleUpload("upload", (payload) => importPayload(payload, "Данные загружены"));
+  handleUpload("upload-results", importResults);
   $("demo").addEventListener("click", async () => {
     try { await importPayload(await api("/synthetic.json"), "Синтетические примеры загружены"); }
     catch (error) { status(error.message, true); }
@@ -360,7 +394,7 @@ async function boot() {
     if (busy || !workspace.records[selected]) return;
     const index = selected;
     busy = true;
-    $("upload").disabled = $("demo").disabled = true;
+    $("upload").disabled = $("upload-results").disabled = $("demo").disabled = true;
     renderResult();
     status("Локальная модель анализирует диалог…");
     try {
@@ -372,7 +406,8 @@ async function boot() {
     } catch (error) { status(error.message, true); }
     finally {
       busy = false;
-      $("upload").disabled = $("demo").disabled = false;
+      $("upload").disabled = $("upload-results").disabled = $("demo").disabled = false;
+      renderList();
       renderResult();
     }
   });
