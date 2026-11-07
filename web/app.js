@@ -4,8 +4,6 @@ const $ = (id) => document.getElementById(id);
 const storageKey = "cqa-workspace-v1";
 const roles = {client: "Клиент", operator: "Оператор", bot: "Бот", system: "Система"};
 const turnPlural = new Intl.PluralRules("ru");
-const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
-const motionPreferenceKey = "cqa-motion-v1";
 const svgNamespace = "http://www.w3.org/2000/svg";
 const roleArtwork = {
   client: '<circle class="glyph-halo" cx="14" cy="11" r="8" stroke="currentColor" opacity=".26"/><circle class="glyph-head" cx="14" cy="10" r="3.4" fill="currentColor"/><path d="M7 21c.4-4 3.1-6 7-6s6.6 2 7 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
@@ -23,28 +21,6 @@ function node(tag, text, className) {
   if (text !== undefined) element.textContent = text;
   if (className) element.className = className;
   return element;
-}
-
-function motionEnabled() {
-  return document.documentElement.dataset.motion === "on";
-}
-
-function setupMotion() {
-  const button = $("motion-toggle");
-  let choice;
-  try { choice = localStorage.getItem(motionPreferenceKey); } catch { /* The preference is still usable in this tab. */ }
-  const sync = () => {
-    const enabled = choice === "on" || (choice !== "off" && !reducedMotion.matches);
-    document.documentElement.dataset.motion = enabled ? "on" : "off";
-    button.hidden = enabled;
-  };
-  button.addEventListener("click", () => {
-    choice = "on";
-    try { localStorage.setItem(motionPreferenceKey, choice); } catch { /* Keep the choice for this tab. */ }
-    sync();
-  });
-  reducedMotion.addEventListener("change", sync);
-  sync();
 }
 
 function speakerBadge(speaker) {
@@ -210,7 +186,7 @@ function showEvidence(span) {
     const marked = index + 1 >= span.start && index + 1 <= span.end;
     turn.classList.toggle("marked", marked);
     rail[index].classList.toggle("marked", marked);
-    if (marked && motionEnabled()) {
+    if (marked) {
       const delay = Math.min(index + 1 - span.start, 5) * 55;
       rail[index].animate([{transform: "scaleY(.65)", opacity: .55}, {transform: "scaleY(1.6)"}, {transform: "scaleY(1)", opacity: 1}],
         {duration: 430, delay, easing: "ease-out"});
@@ -224,7 +200,7 @@ function showEvidence(span) {
   $("evidence-note").hidden = false;
   const target = $("message-" + span.start);
   target.focus({preventScroll: true});
-  target.scrollIntoView({block: "nearest", behavior: motionEnabled() ? "smooth" : "instant"});
+  target.scrollIntoView({block: "nearest", behavior: "smooth"});
 }
 
 function scoreMeter(value) {
@@ -373,7 +349,7 @@ function renderResult(openCriterion, reveal = false) {
   const meter = scoreMeter(final.total);
   totals.append(total, meter, initial);
   pane.append(totals);
-  if (reveal && motionEnabled()) {
+  if (reveal) {
     totals.animate([{opacity: .65, transform: "translateY(5px)"}, {opacity: 1, transform: "translateY(0)"}],
       {duration: 240, easing: "ease-out"});
     meter.querySelector(".meter-value").animate([{strokeDashoffset: "100"}, {strokeDashoffset: String(100 - (final.total ?? 0))}],
@@ -468,7 +444,6 @@ function readEditor() {
 }
 
 async function boot() {
-  setupMotion();
   const config = await api("/api/config");
   defaults = config.rubric;
   $("model").textContent = config.model;

@@ -24,16 +24,25 @@
       </div>
     </div>
   </header>
+  <div class="background-signal" aria-hidden="true">
+    <svg viewBox="0 0 82 20" fill="none">
+      <defs>
+        <linearGradient id="packet-wake">
+          <stop stop-color="#6d9cd7" stop-opacity="0"/>
+          <stop offset="1" stop-color="#4e82be" stop-opacity=".82"/>
+        </linearGradient>
+      </defs>
+      <path d="M2 10h63M31 14h23" stroke="url(#packet-wake)" stroke-width="1.4" stroke-linecap="round"/>
+      <path d="m68 5 5 5-5 5-5-5z" fill="#d9f2ff" stroke="#4977b6" stroke-width="1.25"/>
+      <path d="M68 10h9m-3-3 3 3-3 3" stroke="#5886bf" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </div>
   <main>
     <section class="overview" aria-labelledby="workspace-title">
       <div class="overview-copy">
         <p class="eyebrow">FREEDOM BROKER / DATA CHALLENGE</p>
         <h1 id="workspace-title">Аудит диалогов</h1>
         <p class="overview-description">Проверьте оценку по репликам диалога.</p>
-        <button class="motion-toggle" id="motion-toggle" type="button" hidden>
-          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.5 12 8l-7 4.5z"/></svg>
-          Включить анимацию
-        </button>
       </div>
       <svg class="review-visual" viewBox="0 0 548 196" aria-hidden="true">
         <defs>
