@@ -7,6 +7,15 @@
   if (!ctx || !stage) return;
 
   const tau = Math.PI * 2;
+  let fModel = null;
+  fetch("/f-model.json").then(response => {
+    if (!response.ok) throw new Error("F model unavailable");
+    return response.json();
+  }).then(model => {
+    if (!Array.isArray(model.surfaces) || !Array.isArray(model.materials)) return;
+    fModel = model;
+    draw();
+  }).catch(() => { /* The vector mark remains available as a loading fallback. */ });
   const logo = new Image();
   logo.src = "/f-mark.svg";
   const shield = new Path2D("M16 20h128v39c0 52-20 88-64 113C36 147 16 111 16 59V20Z");
@@ -157,7 +166,7 @@
     }
   }
 
-  function mark(view) {
+  function flatMark(view) {
     if (!logo.complete || !logo.naturalWidth) return;
     const h = view.radius * .76;
     const w = h * 160 / 184;
@@ -188,6 +197,92 @@
     light.addColorStop(1, "rgba(183,241,211,0)");
     ctx.fillStyle = light;
     ctx.fillRect(0, 0, 160, 184);
+    ctx.restore();
+  }
+
+  function normalized(point) {
+    const length = Math.hypot(...point);
+    return point.map(value => value / length);
+  }
+
+  function mark(view) {
+    if (!fModel) return flatMark(view);
+    const size = view.radius * .71;
+    const x = view.x + Math.sin(elapsed * .43) * view.radius * .011;
+    const y = view.y + Math.sin(elapsed * .72) * view.radius * .027;
+    const turn = .38 + Math.sin(elapsed * .48) * .22 + tiltX * .60 + yaw * .70;
+    const lean = -.14 + Math.sin(elapsed * .39) * .075 + tiltY * .45 + pitch * .60;
+    const roll = Math.sin(elapsed * .55) * .035;
+    const breathe = 1 + Math.sin(elapsed * .72 - .6) * .018;
+    const light = normalized([-.8 + Math.sin(elapsed * .25) * .25, .85, 1.7]);
+    const halfway = normalized([light[0], light[1], light[2] + 1]);
+    const dot = (a, b) => a.reduce((sum, value, index) => sum + value * b[index], 0);
+    const shade = (color, illumination, specular) =>
+      "rgb(" + color.map(value => Math.round(clamp(value * illumination + specular, 0, 255))).join(",") + ")";
+    const faces = [];
+    const frontFacing = rotate([0, 0, 1], lean, turn, roll)[2] > 0;
+    for (const face of fModel.surfaces) {
+      if (face.material >= 3 && !frontFacing) continue;
+      const normal = rotate(face.normal, lean, turn, roll);
+      if (normal[2] < .001) continue;
+      const points = face.vertices.map(vertex => rotate(vertex, lean, turn, roll));
+      const screen = points.map(point => {
+        const perspective = 3 / (3 - point[2] * .7);
+        return [x + point[0] * size * perspective * breathe,
+          y - point[1] * size * perspective * breathe];
+      });
+      faces.push({screen, normal, material: face.material,
+        depth: points.reduce((sum, point) => sum + point[2], 0) / points.length});
+    }
+    faces.sort((a, b) => Number(a.material >= 3) - Number(b.material >= 3) || a.depth - b.depth);
+    glow(x, y, size * .80, .10 + (Math.sin(elapsed * .72) + 1) * .014, true);
+    ctx.save();
+    ctx.globalAlpha = .84;
+    for (const face of faces) {
+      const material = fModel.materials[face.material];
+      const illumination = .35 + Math.max(0, dot(face.normal, light)) * .85;
+      const specular = Math.pow(Math.max(0, dot(face.normal, halfway)), 34) * 105;
+      const points = face.screen;
+      ctx.beginPath();
+      for (let i = 0; i < points.length; i++) {
+        if (!i) ctx.moveTo(...points[i]);
+        else ctx.lineTo(...points[i]);
+      }
+      ctx.closePath();
+      if (points.length > 10) {
+        const minX = Math.min(...points.map(point => point[0]));
+        const maxX = Math.max(...points.map(point => point[0]));
+        const minY = Math.min(...points.map(point => point[1]));
+        const maxY = Math.max(...points.map(point => point[1]));
+        const gradient = ctx.createLinearGradient(minX, minY, maxX, maxY);
+        gradient.addColorStop(0, shade(material.color, illumination * 1.14, specular));
+        gradient.addColorStop(.6, shade(material.color, illumination, specular * .7));
+        gradient.addColorStop(1, shade(material.color, illumination * .75, specular * .3));
+        ctx.fillStyle = gradient;
+      } else {
+        ctx.fillStyle = shade(material.color, illumination, specular);
+      }
+      ctx.fill();
+      // Matching edge strokes close subpixel seams between neighbouring faces.
+      ctx.strokeStyle = shade(material.color, illumination, specular);
+      ctx.lineWidth = .5;
+      ctx.stroke();
+      if (face.material === 3 && points.length > 10) {
+        ctx.save();
+        ctx.clip();
+        const shine = (elapsed % 8) / 8 * size * 2.5 - size * 1.2;
+        const pass = ctx.createLinearGradient(x + shine - size * .15, y - size * .5,
+          x + shine + size * .15, y + size * .5);
+        pass.addColorStop(0, "rgba(229,255,211,0)");
+        pass.addColorStop(.46, "rgba(229,255,211,0)");
+        pass.addColorStop(.5, "rgba(229,255,211,.20)");
+        pass.addColorStop(.56, "rgba(229,255,211,0)");
+        pass.addColorStop(1, "rgba(229,255,211,0)");
+        ctx.fillStyle = pass;
+        ctx.fillRect(x - size, y - size, size * 2, size * 2);
+        ctx.restore();
+      }
+    }
     ctx.restore();
   }
 

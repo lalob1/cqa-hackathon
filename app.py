@@ -16,6 +16,8 @@ FILES = {
     "/presentation.js": (WEB / "presentation.js", "text/javascript; charset=utf-8"),
     "/brand-orbit.js": (WEB / "brand-orbit.js", "text/javascript; charset=utf-8"),
     "/f-mark.svg": (WEB / "f-mark.svg", "image/svg+xml"),
+    "/f-model.json": (WEB / "f-model.json", "application/json"),
+    "/f-model.glb": (WEB / "f-model.glb", "model/gltf-binary"),
     "/favicon.svg": (WEB / "favicon.svg", "image/svg+xml"),
     "/style.css": (WEB / "style.css", "text/css; charset=utf-8"),
     "/synthetic.json": (ROOT / "examples" / "synthetic.json", "application/json"),

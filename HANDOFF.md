@@ -73,6 +73,10 @@ The user approved this layout before requesting the F-and-coins experiment. The 
 - A three-second local Chrome sample measured script time at about 5% of one core, compared with approximately 15% in the earlier crown sample. This is one local observation rather than a low-end-device benchmark. No new runtime dependency was added.
 - The current outputs include desktop and mobile PNG previews, `CQA_F_Mark.svg`, a six-second `CQA_F_Coins_Motion.gif` screen capture, `CQA_Blue_App_Checkpoint.png`, `CQA_Blue_Chat_Checkpoint.png`, and the refreshed standalone `CQA_AGENT_HANDOFF.md`. The GIF is a preview capture; the site renders continuously and never loads it as an animation asset.
 
+## Extruded 3D F checkpoint
+
+The user approved the 3D F before requesting true 3D coins. This state is preserved on `checkpoint/3d-f-2026-11-08`. The F is a 334-triangle, 20,068-byte GLB with a thick shield, beveled edges and a raised letter. `web/f-model.json` supplies the same geometry to the native projected-mesh renderer; `tools/build_f_model.py` rebuilds both exports from `web/f-mark.svg`. The browser applies perspective, back-face culling, depth sorting, surface normals and lighting. It permits full background drag rotation and retains gentle automatic float and turn. A Chrome check verified 118 surfaces, 0.225 model-depth span, changing projected caps, drag, keyboard pulse, five viewport widths and zero JavaScript errors. A three-second local sample measured about 5% script time on one core. The GLB header, six materials and unit normals were independently checked.
+
 ## Verification and limits
 
 - Run `python -m unittest discover -s tests -v` and `node --check web/app.js`. Both passed with thirteen automated tests. The API and browser accepted all 65 DEV records.
