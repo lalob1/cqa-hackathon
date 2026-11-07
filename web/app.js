@@ -3,6 +3,8 @@
 const $ = (id) => document.getElementById(id);
 const storageKey = "cqa-workspace-v1";
 const roles = {client: "Клиент", operator: "Оператор", bot: "Бот", system: "Система"};
+const turnPlural = new Intl.PluralRules("ru");
+const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
 const answerText = (value) => ({yes: "Да", no: "Нет", na: "N/A"})[value] ?? String(value);
 const scoreText = (value) => value === null ? "—" : value.toFixed(2);
 let defaults, workspace, selected, historyIndex, busy = false;
@@ -62,6 +64,7 @@ async function importPayload(payload, label) {
   const first = existing.get(records[0].conversation_id) ?? workspace.records.length;
   workspace.records.push(...additions);
   $("filter").value = "";
+  $("critical-only").checked = false;
   selectRecord(first);
   persist(label + " · новых диалогов " + additions.length);
 }
@@ -87,6 +90,7 @@ async function importResults(payload) {
     added += 1;
   }
   $("filter").value = "";
+  $("critical-only").checked = false;
   selectRecord(indexes.get(checked.results[0].conversation_id));
   persist("Добавлено оценок: " + added + " · ошибок в пакете: " + checked.failed);
 }
@@ -106,51 +110,98 @@ function handleUpload(id, importFile) {
 function renderList() {
   const list = $("conversation-list");
   const search = $("filter").value.toLowerCase().trim();
+  let scoredCount = 0;
+  let criticalCount = 0;
   list.replaceChildren();
   $("record-count").textContent = workspace.records.length;
   for (const [index, conversation] of workspace.records.entries()) {
+    const latest = workspace.runs[index]?.at(-1)?.original;
+    const critical = Object.values(latest?.score.flags ?? {}).some(Boolean);
+    if (latest) scoredCount += 1;
+    if (critical) criticalCount += 1;
     if (!(conversation.conversation_id + " " + conversation.language).toLowerCase().includes(search)) continue;
+    if ($("critical-only").checked && !critical) continue;
     const button = node("button", conversation.conversation_id, "record");
     button.type = "button";
     button.setAttribute("aria-current", String(index === selected));
     const channel = conversation.channel === "voice call" ? "Звонок" : "Чат";
-    const scored = workspace.runs[index]?.length ? " · Есть оценка" : "";
-    button.append(node("small", conversation.language + " · " + channel + scored));
+    button.append(node("small", conversation.language + " · " + channel));
+    if (latest) button.append(node("span", critical ? "Грубая ошибка" : "Оценён", critical ? "record-state attention" : "record-state"));
     button.addEventListener("click", () => selectRecord(index));
     list.append(button);
   }
+  $("workspace-scored").textContent = scoredCount;
+  $("workspace-critical").textContent = criticalCount;
   if (!list.childElementCount) list.append(node("p", "Диалоги не найдены.", "empty"));
 }
 
 function renderTranscript() {
   const conversation = workspace.records[selected];
   $("turns").replaceChildren();
+  $("turn-rail").replaceChildren();
+  $("turn-overview").hidden = !conversation?.transcript.length;
+  $("evidence-note").hidden = true;
   $("transcript-title").textContent = conversation?.conversation_id ?? "Выберите диалог";
-  $("conversation-meta").textContent = conversation ? conversation.language + " · " + conversation.transcript.length + " реплик" : "";
+  const count = conversation?.transcript.length ?? 0;
+  const turnLabel = {one: "реплика", few: "реплики"}[turnPlural.select(count)] ?? "реплик";
+  $("conversation-meta").textContent = conversation ? conversation.language + " · " + count + " " + turnLabel : "";
   $("audio").hidden = !conversation?.audio_url;
   if (!conversation) return;
   if (conversation.audio_url) $("audio").href = conversation.audio_url;
+  else $("audio").removeAttribute("href");
   for (const [index, turn] of conversation.transcript.entries()) {
     const item = node("li", undefined, "turn " + turn.speaker);
     item.id = "message-" + (index + 1);
     item.tabIndex = -1;
-    item.append(node("small", "#" + (index + 1) + " · " + turn.timestamp + " · " + roles[turn.speaker]), node("p", turn.text));
+    const meta = node("div", undefined, "turn-meta");
+    meta.append(node("span", roles[turn.speaker], "speaker"), node("small", turn.timestamp), node("small", "#" + (index + 1), "turn-index"));
+    item.append(meta, node("p", turn.text));
     $("turns").append(item);
+    $("turn-rail").append(node("span", undefined, turn.speaker));
   }
 }
 
 function showEvidence(span) {
-  for (const turn of $("turns").children) turn.classList.remove("marked");
-  for (let index = span.start; index <= span.end; index += 1) $("message-" + index).classList.add("marked");
+  const rail = $("turn-rail").children;
+  for (const [index, turn] of Array.from($("turns").children).entries()) {
+    const marked = index + 1 >= span.start && index + 1 <= span.end;
+    turn.classList.toggle("marked", marked);
+    rail[index].classList.toggle("marked", marked);
+    if (marked && !reducedMotion.matches) {
+      const delay = Math.min(index + 1 - span.start, 5) * 35;
+      rail[index].animate([{transform: "scaleY(.65)", opacity: .55}, {transform: "scaleY(1.6)"}, {transform: "scaleY(1)", opacity: 1}],
+        {duration: 300, delay, easing: "ease-out"});
+    }
+  }
+  $("evidence-note").textContent = span.start === span.end
+    ? "Выделена реплика #" + span.start
+    : "Выделены реплики #" + span.start + "–" + span.end;
+  $("evidence-note").hidden = false;
   const target = $("message-" + span.start);
   target.focus({preventScroll: true});
-  target.scrollIntoView({block: "nearest", behavior: "smooth"});
+  target.scrollIntoView({block: "nearest", behavior: reducedMotion.matches ? "instant" : "smooth"});
 }
 
-function metric(label, value) {
-  const tile = node("div", undefined, "metric");
-  tile.append(node("small", label), node("strong", scoreText(value)));
-  return tile;
+function scoreMeter(value) {
+  const namespace = "http://www.w3.org/2000/svg";
+  const ring = document.createElementNS(namespace, "svg");
+  ring.setAttribute("viewBox", "0 0 44 44");
+  ring.setAttribute("aria-hidden", "true");
+  ring.classList.add("score-meter");
+  for (const className of ["meter-track", "meter-value"]) {
+    const circle = document.createElementNS(namespace, "circle");
+    circle.setAttribute("cx", "22");
+    circle.setAttribute("cy", "22");
+    circle.setAttribute("r", "17");
+    circle.setAttribute("pathLength", "100");
+    circle.classList.add(className);
+    if (className === "meter-value") {
+      circle.setAttribute("stroke-dasharray", "100 100");
+      circle.setAttribute("stroke-dashoffset", String(100 - (value ?? 0)));
+    }
+    ring.append(circle);
+  }
+  return ring;
 }
 
 function reviewForm(run, item, prior, current) {
@@ -216,7 +267,11 @@ function renderCriterion(run, item, finalScore, opened) {
   const current = appeal?.decision?.answer ?? original.answer;
   const row = node("details", undefined, "criterion");
   row.open = opened;
-  row.append(node("summary", item.title + " · " + answerText(current)));
+  const summary = node("summary");
+  const tone = item.type === "flag" ? (current === "yes" ? "fail" : "skip")
+    : {yes: "pass", no: "fail", na: "skip"}[current] ?? "number";
+  summary.append(node("span", item.title, "criterion-title"), node("span", answerText(current), "answer " + tone));
+  row.append(summary);
   const points = finalScore.criteria[item.id];
   const weight = item.type === "flag" ? "Отдельный флаг" :
     "Вес " + item.weight + " · начислено " + scoreText(points.points) + " из " + scoreText(points.effective_weight);
@@ -236,11 +291,12 @@ function renderCriterion(run, item, finalScore, opened) {
   return row;
 }
 
-function renderResult(openCriterion) {
+function renderResult(openCriterion, reveal = false) {
   const runs = workspace.runs[selected] || [];
   const run = runs[historyIndex];
   $("score").disabled = busy || !workspace.records[selected];
   $("score").textContent = busy ? "Оценка выполняется…" : "Оценить диалог";
+  document.querySelector(".overview").classList.toggle("is-scoring", busy);
   $("history-label").hidden = runs.length < 2;
   $("history").replaceChildren();
   for (const [index, entry] of runs.entries()) {
@@ -253,14 +309,29 @@ function renderResult(openCriterion) {
   const pane = $("results");
   pane.replaceChildren();
   if (!run) {
-    pane.append(node("p", "После запуска здесь появятся баллы и ссылки на реплики.", "empty"));
+    const empty = node("div", undefined, "empty-result");
+    empty.append(node("p", "Оценка ещё не запущена", "empty-title"), node("p", "После запуска здесь появятся баллы и ссылки на реплики.", "empty"));
+    pane.append(empty);
     return;
   }
   const original = run.original;
   const final = run.finalScore || original.score;
   const totals = node("div", undefined, "totals");
-  totals.append(metric("Исходный / 100", original.score.total), metric("Финальный / 100", final.total));
+  const total = node("div", undefined, "final-total");
+  const value = node("div", undefined, "total-value");
+  value.append(node("strong", scoreText(final.total)), node("small", " / 100"));
+  total.append(node("span", "Итоговая оценка", "total-label"), value);
+  const initial = node("p", undefined, "original-total");
+  initial.append(node("span", "Исходная оценка ИИ"), node("strong", scoreText(original.score.total)));
+  const meter = scoreMeter(final.total);
+  totals.append(total, meter, initial);
   pane.append(totals);
+  if (reveal && !reducedMotion.matches) {
+    totals.animate([{opacity: .65, transform: "translateY(5px)"}, {opacity: 1, transform: "translateY(0)"}],
+      {duration: 240, easing: "ease-out"});
+    meter.querySelector(".meter-value").animate([{strokeDashoffset: "100"}, {strokeDashoffset: String(100 - (final.total ?? 0))}],
+      {duration: 720, easing: "cubic-bezier(.2,.75,.3,1)"});
+  }
   const flags = Object.entries(final.flags).filter(([, value]) => value).map(([id]) => original.rubric.find((item) => item.id === id).title);
   if (flags.length) pane.append(node("p", flags.join(" · "), "flag"));
   const sections = node("ul", undefined, "section-list");
@@ -359,6 +430,7 @@ async function boot() {
   selectRecord(0);
   if (!workspace.records.length) await importPayload(await api("/synthetic.json"), "Синтетические примеры загружены");
   $("filter").addEventListener("input", renderList);
+  $("critical-only").addEventListener("change", renderList);
   $("history").addEventListener("change", () => { historyIndex = Number($("history").value); renderResult(); });
   handleUpload("upload", (payload) => importPayload(payload, "Данные загружены"));
   handleUpload("upload-results", importResults);
@@ -397,18 +469,20 @@ async function boot() {
     $("upload").disabled = $("upload-results").disabled = $("demo").disabled = true;
     renderResult();
     status("Локальная модель анализирует диалог…");
+    let reveal = false;
     try {
       const result = await api("/api/score", {conversation: workspace.records[index], rubric: workspace.rubric});
       const runs = workspace.runs[index] ??= [];
       runs.push({original: result, appeals: {}});
       if (index === selected) historyIndex = runs.length - 1;
+      reveal = index === selected;
       persist("Оценка сохранена.");
     } catch (error) { status(error.message, true); }
     finally {
       busy = false;
       $("upload").disabled = $("upload-results").disabled = $("demo").disabled = false;
       renderList();
-      renderResult();
+      renderResult(undefined, reveal);
     }
   });
 }
