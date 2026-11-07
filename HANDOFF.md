@@ -1,6 +1,6 @@
 # CQA Hackathon — agent and team handoff
 
-Updated 2026-11-07 (Asia/Qyzylorda). This handoff covers the CQA Desk interface, model calibration, the DEV export, and control-run preparation for the Freedom Broker Data Challenge.
+Updated 2026-11-08 (Asia/Qyzylorda). This handoff covers the CQA Desk interface, model calibration, the DEV export, and control-run preparation for the Freedom Broker Data Challenge.
 
 ## Repository and access
 
@@ -51,7 +51,7 @@ DEV retrieval was verified from the signed organizer endpoint. It returned **65 
 
 The model sees the configured rubrics and transcript, including bot and system events as context. It does not receive the conversation ID, prior judgments or labels. The code assigns points and flags from the answers. It uses exact fractional arithmetic before rounding totals and normalizes to 100 over applicable positive weight, including when an edited rubric has a different total configured weight. Sections show their earned points and maximum after redistribution. A saved run retains its own rubric so later edits do not change it. Each review decision records the final answer and reason separately.
 
-CQA Desk uses a lightly blue three-column review workspace on desktop and stacks on phones. The hero says **Аудит диалогов**. Its diagram animates the connection from a transcript to a criterion and shows the selected run's actual score when available. Client, operator, and quality review have distinct animated profile, headset and inspection icons. A 480 ms fade runs once when the page loads. The title and selected section headings print in staggered words, with cyan and magenta layers that replay on mouse hover. Cyan comets enter and exit the navy grid on curved paths. The backdrop pauses when the tab is hidden.
+CQA Desk uses a dark blue three-column review workspace on desktop and stacks on phones. The checklist editor uses the same palette, with a single **Чек-лист** heading. The hero says **Аудит диалогов**. Its diagram animates the connection from a transcript to a criterion and shows the selected run's actual score when available. Client, operator, and quality review have distinct animated profile, headset and inspection icons. A 480 ms fade runs once when the page loads. The title and selected section headings print in staggered words, with cyan and magenta layers that replay on mouse hover. Cyan comets enter and exit the navy grid on curved paths. The backdrop pauses when the tab is hidden.
 
 Qwen3-4B Q4_K_M is the initial local model candidate. The engine requests schema-constrained JSON, retries an invalid judgment once, and reports an error if it still cannot validate it. Bounds validation ensures referenced turns exist. Human review still needs to check whether a cited passage supports the decision. Current calls are scored from transcripts. Audio is a playback link. The demo uses browser-local storage for data, rubrics, runs and appeals. Team collaboration here is shared source code through GitHub. App state lives in each browser profile.
 
