@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.venv/
+.env
+.env.*
+data/
+runs/
+*.sqlite*
+*.pdf
+*.mp4
+*.wav
+*.gguf

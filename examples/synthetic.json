@@ -1,0 +1,104 @@
+{
+  "isSuccess": true,
+  "error": "",
+  "data": {
+    "dataset_group_id": "SYNTHETIC",
+    "total_records": 3,
+    "records": [
+      {
+        "conversation_id": "sample-ru",
+        "language": "RU",
+        "channel": "agent chat",
+        "audio_url": null,
+        "transcript": [
+          {
+            "timestamp": "00:00",
+            "speaker": "client",
+            "text": "Здравствуйте! Где посмотреть тарифы?"
+          },
+          {
+            "timestamp": "00:07",
+            "speaker": "operator",
+            "text": "Здравствуйте! Меня зовут Алия. Откройте раздел «Тарифы» в меню приложения."
+          },
+          {
+            "timestamp": "00:14",
+            "speaker": "client",
+            "text": "Спасибо, нашёл."
+          },
+          {
+            "timestamp": "00:21",
+            "speaker": "operator",
+            "text": "Рада помочь. Если появятся вопросы, напишите нам. До свидания!"
+          }
+        ]
+      },
+      {
+        "conversation_id": "sample-kz",
+        "language": "KZ",
+        "channel": "agent chat",
+        "audio_url": null,
+        "transcript": [
+          {
+            "timestamp": "00:00",
+            "speaker": "client",
+            "text": "Сәлеметсіз бе! Қосымшаға кіре алмай жатырмын."
+          },
+          {
+            "timestamp": "00:07",
+            "speaker": "operator",
+            "text": "Сәлеметсіз бе! Менің атым Аян. Қосымша қандай қате көрсетіп тұр?"
+          },
+          {
+            "timestamp": "00:14",
+            "speaker": "client",
+            "text": "Құпиясөз қате дейді."
+          },
+          {
+            "timestamp": "00:21",
+            "speaker": "operator",
+            "text": "Кіру экранында «Құпиясөзді ұмыттыңыз ба?» батырмасын басып, нұсқауларды орындаңыз."
+          },
+          {
+            "timestamp": "00:28",
+            "speaker": "system",
+            "text": "Клиентпен байланыс үзілді."
+          }
+        ]
+      },
+      {
+        "conversation_id": "sample-en",
+        "language": "EN",
+        "channel": "agent chat",
+        "audio_url": null,
+        "transcript": [
+          {
+            "timestamp": "00:00",
+            "speaker": "client",
+            "text": "Can you tell me my account balance?"
+          },
+          {
+            "timestamp": "00:07",
+            "speaker": "operator",
+            "text": "Hello! I'm Dana. Your balance is 200 credits."
+          },
+          {
+            "timestamp": "00:14",
+            "speaker": "client",
+            "text": "How did you verify my identity?"
+          },
+          {
+            "timestamp": "00:21",
+            "speaker": "operator",
+            "text": "I did not verify it. Goodbye."
+          },
+          {
+            "timestamp": "00:28",
+            "speaker": "system",
+            "text": "Chat closed by operator."
+          }
+        ]
+      }
+    ]
+  }
+}

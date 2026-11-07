@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CQA / Аудит диалогов</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="masthead">
+    <div class="brand"><span class="monogram" aria-hidden="true">CQ</span><div>Conversation Quality Analytics<small>Рабочая станция контроля качества</small></div></div>
+    <div class="model"><span class="dot"></span><span id="model">Локальная модель</span></div>
+  </header>
+  <main>
+    <section class="overview" aria-labelledby="workspace-title">
+      <div><p class="eyebrow">DATA CHALLENGE / CQA</p><h1 id="workspace-title">Аудит диалогов</h1><p>Оцените оператора, проверьте доказательства и сохраните решение.</p></div>
+      <div class="actions">
+        <label class="button secondary upload">Загрузить JSON <input type="file" id="upload" accept=".json,application/json"></label>
+        <button class="secondary" id="demo" type="button">Примеры</button>
+        <button class="secondary" id="toggle-rubric" type="button" aria-expanded="false" aria-controls="editor">Чек-лист</button>
+      </div>
+    </section>
+    <p id="status" role="status" aria-live="polite"></p>
+    <section id="editor" class="panel editor" hidden aria-labelledby="rubric-title">
+      <header><p class="eyebrow">ПРАВИЛА ОЦЕНКИ</p><h2 id="rubric-title">Чек-лист</h2><p>Изменения применяются к новым запускам. В истории хранится версия правил каждого запуска.</p></header>
+      <form id="rubric-form">
+        <div id="criteria-editor"></div>
+        <div class="actions">
+          <button class="secondary" id="add" type="button">Добавить критерий</button>
+          <button class="secondary" id="reset-rubric" type="button">Вернуть исходный</button>
+          <button class="secondary" id="export-rubric" type="button">Скачать чек-лист</button>
+          <button type="submit">Сохранить чек-лист</button>
+        </div>
+      </form>
+    </section>
+    <div class="workspace">
+      <aside class="panel library" aria-labelledby="library-title">
+        <p class="eyebrow">01 / ВЫБОР</p><h2 id="library-title">Диалоги <span class="count" id="record-count">0</span></h2>
+        <label for="filter">Поиск по ID или языку</label>
+        <input type="search" id="filter" placeholder="Например, KZ">
+        <div id="conversation-list"></div>
+      </aside>
+      <section class="panel transcript" aria-labelledby="transcript-title">
+        <header><p class="eyebrow">02 / ТРАНСКРИПТ</p><h2 id="transcript-title">Выберите диалог</h2><p id="conversation-meta"></p><a id="audio" target="_blank" rel="noopener noreferrer" hidden>Открыть запись звонка ↗</a></header>
+        <ol id="turns"></ol>
+      </section>
+      <section class="panel result" aria-labelledby="score-title">
+        <header><p class="eyebrow">03 / ОЦЕНКА</p><h2 id="score-title">Результат</h2></header>
+        <div class="actions">
+          <button type="button" id="score" disabled>Оценить диалог</button>
+          <label id="history-label" hidden>Запуск <select id="history"></select></label>
+        </div>
+        <div id="results"><p class="empty">После запуска здесь появятся баллы и ссылки на реплики.</p></div>
+      </section>
+    </div>
+  </main>
+</body>
+</html>
