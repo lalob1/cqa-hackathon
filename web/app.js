@@ -30,15 +30,16 @@ function motionEnabled() {
 }
 
 function setupMotion() {
+  const button = $("motion-toggle");
   let choice;
   try { choice = localStorage.getItem(motionPreferenceKey); } catch { /* The preference is still usable in this tab. */ }
   const sync = () => {
     const enabled = choice === "on" || (choice !== "off" && !reducedMotion.matches);
     document.documentElement.dataset.motion = enabled ? "on" : "off";
-    $("motion-label").textContent = enabled ? "Остановить анимацию" : "Включить анимацию";
+    button.hidden = enabled;
   };
-  $("motion-toggle").addEventListener("click", () => {
-    choice = motionEnabled() ? "off" : "on";
+  button.addEventListener("click", () => {
+    choice = "on";
     try { localStorage.setItem(motionPreferenceKey, choice); } catch { /* Keep the choice for this tab. */ }
     sync();
   });

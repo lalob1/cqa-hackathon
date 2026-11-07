@@ -100,8 +100,6 @@ button:disabled, .upload:has(input:disabled) { opacity: .6; cursor: default; }
 .motion-toggle:hover { background: #2a456b; }
 .motion-toggle:focus-visible { outline-color: #bddeff; }
 .motion-toggle svg { width: .9rem; height: .9rem; fill: #bbdfff; }
-.motion-toggle .motion-pause, [data-motion="on"] .motion-toggle .motion-play { display: none; }
-[data-motion="on"] .motion-toggle .motion-pause { display: block; }
 .text-button { background: transparent; border-color: transparent; }
 .secondary:hover, .text-button:hover { background: #f5f8ff; border-color: #a8bad7; }
 .upload { position: relative; }
