@@ -1,10 +1,10 @@
 # CQA Hackathon — agent and team handoff
 
-Updated 2026-11-07 (Asia/Qyzylorda). This is the first implementation milestone for the Freedom Broker Data Challenge.
+Updated 2026-11-07 (Asia/Qyzylorda). This handoff covers the initial implementation and the consultation calibration branch for the Freedom Broker Data Challenge.
 
 ## Repository and access
 
-- Team repository [lalob1/cqa-hackathon](https://github.com/lalob1/cqa-hackathon), private while the team builds. Start from `main`. GitHub returned HTTP 201 for the invitation to `toxxxapts`. GitHub grants access after the invitee accepts. Additional teammates need their own invitations.
+- Team repository [lalob1/cqa-hackathon](https://github.com/lalob1/cqa-hackathon), private while the team builds. Start from `main`. GitHub lists `toxxxapts` and `Ain-gl` as collaborators. `zhaziiaa14` has a pending invitation. The consultation calibration is on `model/consultation-applicability` for review.
 - Work in short branches, for example `eval/dev-labels`, `model/rubric-calibration`, `ui/review`, and `ops/demo`. Keep branches independent by using the interfaces in the table below. Open PRs into `main`.
 - The guide calls for a public repository URL for the submission. The team still needs to decide when to publish and submit it. Confirm the organizer’s current cutoff and submission channel.
 - Local checkout on the original Windows machine is `C:/Users/lolol/Documents/Codex/2026-11-07/50-ai-10-ground-truth-1/work/cqa-hackathon`. Collaborators should clone GitHub.
@@ -32,6 +32,7 @@ DEV retrieval was verified from the signed organizer endpoint. It returned **65 
 | [web/index.html](web/index.html), [web/app.js](web/app.js), [web/style.css](web/style.css) | Browser workspace with import, filters, transcript and audio link, rubric editing and export, criterion scores, evidence links, per-dialogue run history, and appeal review. |
 | [batch.py](batch.py) | `fetch`, `score`, `compare`. Each batch writes raw judgments, rubric/input hashes, totals, provider/model, token counts, and per-dialogue errors. Comparison reports criterion agreement, N/A disagreement, missing IDs and total MAE. |
 | [examples/synthetic.json](examples/synthetic.json) | Three invented dialogues, one per language, with no customer data and no precomputed scores. |
+| [examples/consultation-cases.json](examples/consultation-cases.json) | Four invented dialogues for the consultation applicability regression. The expected levels are documented below and stay outside the model input. |
 | [tests/test_cqa.py](tests/test_cqa.py) | Seven checks covering validation, changed rubrics, proportional N/A/scale math, independent flags, review recalculation, evidence bounds and model failure. |
 | [HANDOFF.md](HANDOFF.md) | This record of decisions, status, verification, and next work. |
 
@@ -50,13 +51,42 @@ Qwen3-4B Q4_K_M is the initial local model candidate. The engine requests schema
 
 ## Verification and limits
 
-- Run `python -m unittest discover -s tests -v` and `node --check web/app.js`. Both passed during development. The API adapter retrieved and validated all 65 DEV records.
-- Real model smoke test passed in Chrome with Qwen3-4B Q4_K_M through llama.cpp Vulkan build 11719. One fresh synthetic RU chat returned all eight judgments in about 38 seconds. The evidence link highlighted the referenced turn. A test appeal preserved the 100.00 original and changed the final to 92.31. The rubric editor saved an added criterion, and both scores survived reload. The edited rubric was not re-scored in this smoke test. Ollama, KZ/EN inference, real calls, and the full DEV scoring run still need live verification.
-- Observed quality issue to investigate first: the baseline marked consultation N/A even though the customer asked an explicit tariff question in turn 1. It cited the closing turn. Evidence bounds and valid JSON alone did not catch this. Compare a targeted applicability check against the baseline before freezing a model.
+- Run `python -m unittest discover -s tests -v` and `node --check web/app.js`. Both passed on the calibration branch with eight automated tests. The API adapter retrieved and validated all 65 DEV records.
+- The original Chrome smoke test used Qwen3-4B Q4_K_M through llama.cpp Vulkan build 11719. A fresh synthetic RU chat returned all eight judgments in about 38 seconds. The evidence link highlighted the referenced turn. A test appeal preserved the 100.00 original and changed the final to 92.31. The rubric editor saved an added criterion, and both scores survived reload. Live Ollama, full DEV scoring, and a successful long-call run remain open.
+- The baseline marked consultation N/A even though the customer asked an explicit tariff question in turn 1. It cited the closing turn. Evidence bounds and valid JSON allowed the result. See the paired calibration below.
 - No organizer Ground Truth was available in the attachments or DEV response. There is no challenge accuracy result. The team must label a development set and keep it separate from the 10 unseen controls.
 - The attachment checklist covers chat criteria and uses a separate critical flag. Calls use those same transcript-based criteria for now. No voice-tone or diction evaluation has been implemented.
 - App storage is browser-local and subject to quota. CLI output is persisted to a local JSON file. The current prototype runs without accounts, as the demo guide specifies.
 - The public submission, control run and final commit freeze are future milestones.
+
+## Consultation calibration
+
+The `cqa-rubric-v3` candidate asks for evidence and rationale before the answer, checks each configured N/A rule against the full transcript, and gives the model a uniform string choice for every answer. The parser converts numeric scale choices to integers before scoring or export. `batch.py compare` now separates false N/A from missed N/A. The timeout is configurable through `CQA_TIMEOUT_SECONDS` with a default of 240 seconds.
+
+Four synthetic cases were tested with Qwen3-4B Q4_K_M, seed 42, temperature 0 and llama.cpp Vulkan build 11719. These are developer-authored expectations for the consultation criterion. Organizer labels are still needed to measure challenge accuracy. The model hash for the local GGUF is `7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5`.
+
+| Case | Expected | V1 (`8ffaf34`) | V3 candidate | Separate one-criterion probe |
+| --- | ---: | ---: | ---: | ---: |
+| RU tariff question answered | 20 | N/A | 15 | 20 |
+| RU greeting, then disconnect before a request | N/A | N/A | N/A | N/A |
+| KZ password request followed only by a greeting | 0 | N/A | N/A | N/A |
+| EN statement question raised after the opening | 20 | N/A | 15 | 20 |
+
+- Consultation applicability rose from **1/4 to 3/4**. Exact consultation levels were **1/4 in both full-rubric runs**. The V3 explanation in both 15-point cases claimed a missing secondary detail without identifying it. The Kazakh case still confused an unanswered request with a conversation that ended before a request was made.
+- A short intermediate run with evidence first and mixed JSON answer types still marked the RU tariff question N/A and assigned 15 to the genuine no-request case. The tested V3 measures the prompt and schema changes together.
+- The separate one-criterion probe reached **3/4 exact consultation levels** and missed the same Kazakh case. The app uses the V3 full-rubric call. A next experiment can first identify the concrete client request and its turn, then apply the configured N/A condition and score anchor.
+- The 115-turn DEV call hit the 240-second timeout on the laptop. The English fixture initially waited behind it and timed out. The isolated English retry produced the result in the table. Schedule the next long-call test with a larger timeout and measure throughput on the machine planned for the control run. The edited single-criterion rubric returned a valid live `yes` with turn 2 as evidence. That check exercised the engine through Python.
+- Raw experimental outputs on the original computer are `../consultation-baseline.json`, `../consultation-candidate.json` (intermediate), `../consultation-v3.json`, `../consultation-v3-en-retry.json`, `../consultation-focused-probe.json`, and `../calibration-edited-rubric-smoke.json`. Runtime logs are `../calibration-llama-err.log` and `../calibration-llama-out.log`.
+
+Reproduce the full-rubric comparison from this branch with the same local model server and the [synthetic cases](examples/consultation-cases.json):
+
+```powershell
+git worktree add --detach ../cqa-v1 8ffaf34
+python ../cqa-v1/batch.py score examples/consultation-cases.json --output runs/consultation-v1.json
+python batch.py score examples/consultation-cases.json --output runs/consultation-v3.json
+```
+
+Run the two batches sequentially on a single-slot model server. Compare `judgments.consultation.answer` with the table. Keep the candidate in review until it has been evaluated against independently labeled DEV transcripts. Score the baseline and candidate against the same holdout and inspect both total MAE and criterion errors.
 
 ## Parallel work plan
 

@@ -60,7 +60,7 @@ def compare(results, labels, rubric):
     rubric_hash = fingerprint(rubric)
     require(all(row["audit"]["rubric_sha256"] == rubric_hash for row in results), "Predictions use a different rubric.")
     missing, unexpected = sorted(labels.keys() - by_id.keys()), sorted(by_id.keys() - labels.keys())
-    metrics = {item["id"]: {"exact": 0, "compared": 0, "na_disagreement": 0} for item in rubric}
+    metrics = {item["id"]: {"exact": 0, "compared": 0, "false_na": 0, "missed_na": 0} for item in rubric}
     errors = []
     comparable = sorted(labels.keys() & by_id.keys())
     undefined_total_pairs = 0
@@ -74,9 +74,12 @@ def compare(results, labels, rubric):
             undefined_total_pairs += 1
         for key, row in metrics.items():
             row["compared"] += 1
-            row["exact"] += int(prediction[key] == labels[cid][key])
-            row["na_disagreement"] += int((prediction[key] == "na") != (labels[cid][key] == "na"))
+            predicted_answer, labeled_answer = prediction[key], labels[cid][key]
+            row["exact"] += int(predicted_answer == labeled_answer)
+            row["false_na"] += int(predicted_answer == "na" and labeled_answer != "na")
+            row["missed_na"] += int(labeled_answer == "na" and predicted_answer != "na")
     for row in metrics.values():
+        row["na_disagreement"] = row["false_na"] + row["missed_na"]
         row["exact_rate"] = row["exact"] / row["compared"] if row["compared"] else None
     return {"labeled": len(labels), "matched": len(comparable), "missing_ids": missing, "unexpected_ids": unexpected,
             "total_mae": round(sum(errors) / len(errors), 4) if errors else None, "total_pairs": len(errors),

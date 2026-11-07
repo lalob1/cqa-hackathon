@@ -1,0 +1,114 @@
+[
+  {
+    "conversation_id": "sample-ru",
+    "language": "RU",
+    "channel": "agent chat",
+    "audio_url": null,
+    "transcript": [
+      {
+        "timestamp": "00:00",
+        "speaker": "client",
+        "text": "Здравствуйте! Где посмотреть тарифы?"
+      },
+      {
+        "timestamp": "00:07",
+        "speaker": "operator",
+        "text": "Здравствуйте! Меня зовут Алия. Откройте раздел «Тарифы» в меню приложения."
+      },
+      {
+        "timestamp": "00:14",
+        "speaker": "client",
+        "text": "Спасибо, нашёл."
+      },
+      {
+        "timestamp": "00:21",
+        "speaker": "operator",
+        "text": "Рада помочь. Если появятся вопросы, напишите нам. До свидания!"
+      }
+    ]
+  },
+  {
+    "conversation_id": "consultation-ru-no-request",
+    "language": "RU",
+    "channel": "agent chat",
+    "audio_url": null,
+    "transcript": [
+      {
+        "timestamp": "00:00",
+        "speaker": "client",
+        "text": "Здравствуйте!"
+      },
+      {
+        "timestamp": "00:05",
+        "speaker": "operator",
+        "text": "Здравствуйте, меня зовут Алия. Чем могу помочь?"
+      },
+      {
+        "timestamp": "00:10",
+        "speaker": "system",
+        "text": "Клиент отключился. Чат закрыт."
+      }
+    ]
+  },
+  {
+    "conversation_id": "consultation-kz-unanswered",
+    "language": "KZ",
+    "channel": "agent chat",
+    "audio_url": null,
+    "transcript": [
+      {
+        "timestamp": "00:00",
+        "speaker": "client",
+        "text": "Сәлеметсіз бе! Қосымшаға кіре алмай жатырмын. Құпиясөзді қалай қалпына келтіремін?"
+      },
+      {
+        "timestamp": "00:05",
+        "speaker": "operator",
+        "text": "Сәлеметсіз бе, менің атым Аян."
+      },
+      {
+        "timestamp": "00:10",
+        "speaker": "system",
+        "text": "Клиент чаттан шығып кетті."
+      }
+    ]
+  },
+  {
+    "conversation_id": "consultation-en-late-request",
+    "language": "EN",
+    "channel": "agent chat",
+    "audio_url": null,
+    "transcript": [
+      {
+        "timestamp": "00:00",
+        "speaker": "client",
+        "text": "Hi!"
+      },
+      {
+        "timestamp": "00:05",
+        "speaker": "operator",
+        "text": "Hello, I am Dana. How can I help?"
+      },
+      {
+        "timestamp": "00:10",
+        "speaker": "client",
+        "text": "Where can I download my monthly statement?"
+      },
+      {
+        "timestamp": "00:15",
+        "speaker": "operator",
+        "text": "Open Documents in the app, select the month, then tap Download statement."
+      },
+      {
+        "timestamp": "00:20",
+        "speaker": "client",
+        "text": "That worked, thank you."
+      },
+      {
+        "timestamp": "00:25",
+        "speaker": "operator",
+        "text": "Glad I could help. Please reach out if you need anything else. Goodbye."
+      }
+    ]
+  }
+]

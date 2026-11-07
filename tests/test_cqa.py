@@ -1,9 +1,10 @@
 import copy
 import json
 import unittest
+from unittest.mock import patch
 
 from batch import compare
-from engine import DEFAULT_RUBRIC, ModelError, calculate, extract_records, read_json, score_conversation, validate_rubric
+from engine import DEFAULT_RUBRIC, ModelError, calculate, extract_records, local_json_post, read_json, score_conversation, validate_rubric
 
 SAMPLE = read_json("examples/synthetic.json")
 ANSWERS = dict(greeting="yes", needs="na", identity="na", consultation=15,
@@ -46,12 +47,15 @@ class ChecklistTests(unittest.TestCase):
         records = extract_records(SAMPLE)
         sample = records[0]
         calls = []
-        judgments = {key: {"answer": value, "reason": "Проверено.", "evidence": [{"start": 1, "end": 2}]}
+        judgments = {key: {"answer": str(value), "reason": "Проверено.", "evidence": [{"start": 1, "end": 2}]}
                      for key, value in ANSWERS.items()}
 
         def chat(messages, schema):
             calls.append(json.loads(messages[1]["content"]))
             self.assertEqual(set(schema["required"]), set(ANSWERS))
+            consultation = schema["properties"]["consultation"]
+            self.assertEqual(consultation["required"], ["evidence", "reason", "answer"])
+            self.assertEqual(consultation["properties"]["answer"]["enum"], ["0", "5", "10", "15", "20", "na"])
             self.assertNotIn("conversation_id", calls[-1])
             bad = copy.deepcopy(judgments)
             bad["greeting"]["evidence"][0]["end"] = 100
@@ -67,14 +71,24 @@ class ChecklistTests(unittest.TestCase):
         self.assertNotEqual(newer["audit"]["input_sha256"], result["audit"]["input_sha256"])
         self.assertNotEqual(calls[0]["messages"][0]["text"], calls[-1]["messages"][0]["text"])
         self.assertEqual(result["score"]["total"], 77.69)
-        metrics = compare([result], {sample["conversation_id"]: {**ANSWERS, "closing": "yes"}, "missing": ANSWERS}, DEFAULT_RUBRIC)
-        self.assertEqual(metrics["total_mae"], 7.69)
+        self.assertIs(type(result["judgments"]["consultation"]["answer"]), int)
+        labels = {**ANSWERS, "closing": "yes", "needs": "yes", "consultation": "na"}
+        metrics = compare([result], {sample["conversation_id"]: labels, "missing": ANSWERS}, DEFAULT_RUBRIC)
+        self.assertEqual(metrics["total_mae"], 14.81)
         self.assertEqual(metrics["missing_ids"], ["missing"])
         self.assertEqual(metrics["criteria"]["closing"]["exact_rate"], 0)
+        self.assertEqual(metrics["criteria"]["needs"]["false_na"], 1)
+        self.assertEqual(metrics["criteria"]["consultation"]["missed_na"], 1)
 
     def test_model_failure_is_visible(self):
         with self.assertRaises(ModelError):
             score_conversation(extract_records(SAMPLE)[0], DEFAULT_RUBRIC, lambda *_: {"message": {"content": "{}"}})
+
+    def test_model_timeout_is_configurable(self):
+        with patch.dict("os.environ", {"CQA_TIMEOUT_SECONDS": "420"}), patch("engine.urlopen", side_effect=TimeoutError) as send:
+            with self.assertRaisesRegex(ModelError, "420"):
+                local_json_post("http://127.0.0.1:8080", "/score", {}, "Test")
+            self.assertEqual(send.call_args.kwargs["timeout"], 420)
 
 
 if __name__ == "__main__":
