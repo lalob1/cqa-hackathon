@@ -97,9 +97,15 @@ The browser can import a saved CLI batch after importing its transcripts. It ver
 
 Local six-chat DEV diagnostic used two seeded selections per language. The provisional reference was written from the transcripts and rubric before opening model outputs. It is one assistant review pass and needs independent adjudication. V3 returned **5/6** usable scores, with **6.454/100** total-score MAE on the five paired rows. Exact agreement was **3/5** for consultation, **0/5** for closing, **1/5** for needs, and **4/5** for the critical flag. One English after-hours paid advice offer was missed. One Kazakh chat timed out at 420 seconds while the model generated over 1,800 tokens. These are DEV diagnostics, with organizer Ground Truth still pending.
 
-The 115-turn call was used to measure a compact prompt candidate on the local tokenizer. Input content fell from **9,713 to 4,824 tokens** while retaining all 115 turns. The candidate remains under test and is separate from the control-readiness branch. To continue the DEV comparison locally, use `../dev-review-six.json`, `../dev-review-six-labels.json`, `../dev-review-six-notes.md`, `../dev-review-v3-cuda.json`, and `../dev-review-v3-cuda-metrics.json`. The verified Windows CUDA runtime is under `../runtime-cuda-b11719/`. This material stays local.
+The 115-turn call was used to measure a compact prompt prototype on the local tokenizer. Input content fell from **9,713 to 4,824 tokens** in that measurement while retaining all 115 turns. To continue the DEV comparison locally, use `../dev-review-six.json`, `../dev-review-six-labels.json`, `../dev-review-six-notes.md`, `../dev-review-v3-cuda.json`, and `../dev-review-v3-cuda-metrics.json`. The verified Windows CUDA runtime is under `../runtime-cuda-b11719/`. This material stays local.
 
 Control validation requires the organizer's 10 transcripts and the scoring reference when released. The commands are in [README.md](README.md#контрольный-запуск). Before the code freeze, run the full control batch, check all ten rows and the empty error list, rehearse the five-minute flow with the replacement criterion, and record the commit and model revision. Public submission requires the organizer's submission channel and the team's decision to publish.
+
+## Compact scoring experiment
+
+`model/compact-transcripts` changes the prompt version to `cqa-rubric-v4`. It uses compact turn arrays and elapsed seconds for chronologically ordered call timestamps. The UI, evidence turn numbers, transcript fingerprints, and original source times stay available. For calls with timestamps that cannot be parsed in order, the model receives the source times. The candidate also caps explanations and generation length, uses a small repetition penalty, and clarifies consultation, closing, and paid off-company offers.
+
+This is an experimental branch. The four-record live probe covers the previously timed-out Kazakh chat, the missed English paid advice offer, a Russian farewell-only chat, and the 115-turn call. Local inputs and results are `../dev-compact-probe-input.json` and `../dev-compact-v4-probe.json`. Use the same independently reviewed DEV reference before selecting a competition model. Browser checks on the preceding branch showed the call recording link and confirmed the page fit a 390 px viewport.
 
 ## Parallel work plan
 

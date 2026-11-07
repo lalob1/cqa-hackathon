@@ -9,7 +9,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from batch import compare, reserve_checkpoint, run_batch, write_json
-from engine import (DEFAULT_RUBRIC, ModelError, calculate, extract_records, local_json_post, read_json,
+from engine import (DEFAULT_RUBRIC, ModelError, calculate, extract_records, local_json_post, model_transcript, numbered_turns, read_json,
                     score_conversation, validate_batch_results, validate_rubric)
 
 SAMPLE = read_json("examples/synthetic.json")
@@ -75,7 +75,7 @@ class ChecklistTests(unittest.TestCase):
         self.assertEqual(result["audit"]["attempts"], 2)
         self.assertEqual(result["audit"]["prompt_tokens"], 200)
         self.assertNotEqual(newer["audit"]["input_sha256"], result["audit"]["input_sha256"])
-        self.assertNotEqual(calls[0]["messages"][0]["text"], calls[-1]["messages"][0]["text"])
+        self.assertNotEqual(calls[0]["messages"][0][3], calls[-1]["messages"][0][3])
         self.assertEqual(result["score"]["total"], 77.69)
         self.assertIs(type(result["judgments"]["consultation"]["answer"]), int)
         labels = {**ANSWERS, "closing": "yes", "needs": "yes", "consultation": "na"}
@@ -152,6 +152,19 @@ class ChecklistTests(unittest.TestCase):
         invalid["results"][0]["judgments"]["greeting"]["evidence"][0]["end"] = 99
         with self.assertRaisesRegex(ValueError, "пределы"):
             validate_batch_results(invalid, [sample])
+
+    def test_compact_call_keeps_turns_and_original_source_times(self):
+        turns = numbered_turns({"transcript": [
+            {"timestamp": "2026-11-07T12:00:00Z", "speaker": "client", "text": "Question"},
+            {"timestamp": "2026-11-07T17:00:07.500+05:00", "speaker": "operator", "text": "Answer"},
+        ]})
+        kind, rows = model_transcript(turns, "voice call")
+        self.assertEqual(kind, "elapsed seconds since turn 1")
+        self.assertEqual(rows, [[1, 0, "client", "Question"], [2, 7.5, "operator", "Answer"]])
+        self.assertEqual(turns[0]["timestamp"], "2026-11-07T12:00:00Z")
+        kind, rows = model_transcript(list(reversed(turns)), "voice call")
+        self.assertEqual(kind, "source timestamps")
+        self.assertEqual(rows[0][1], "2026-11-07T17:00:07.500+05:00")
 
 
 if __name__ == "__main__":
