@@ -6,6 +6,7 @@ import re
 from datetime import datetime, timezone
 from fractions import Fraction
 from pathlib import Path
+from time import perf_counter
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
@@ -135,23 +136,26 @@ def model_answer_options(item):
     return {str(value): value for value in allowed_answers(item)}
 
 
-def parse_model_judgments(judgments, rubric, turn_count):
+def validate_judgments(judgments, rubric, turn_count, *, model_answers=False):
     require(isinstance(judgments, dict) and set(judgments) == {item["id"] for item in rubric},
             "Нужна оценка по каждому критерию из текущего чек-листа.")
     parsed = {}
     for item in rubric:
         key = item["id"]
         row = judgments[key]
-        options = model_answer_options(item)
-        require(isinstance(row, dict) and isinstance(row.get("answer"), str) and row["answer"] in options,
-                f"{key}: недопустимая оценка.")
+        require(isinstance(row, dict), f"{key}: ожидается объект оценки.")
+        answer = row.get("answer")
+        if model_answers:
+            options = model_answer_options(item)
+            answer = options.get(answer) if isinstance(answer, str) else None
+        require(valid_answer(answer, item), f"{key}: недопустимая оценка.")
         require(filled(row.get("reason"), 1000), f"{key}: отсутствует обоснование.")
         evidence = row.get("evidence")
         require(isinstance(evidence, list) and 1 <= len(evidence) <= 4, f"{key}: укажите от 1 до 4 фрагментов.")
         for span in evidence:
             require(isinstance(span, dict) and type(span.get("start")) is int and type(span.get("end")) is int
                     and 1 <= span["start"] <= span["end"] <= turn_count, f"{key}: ссылка выходит за пределы диалога.")
-        parsed[key] = {**row, "answer": options[row["answer"]]}
+        parsed[key] = {**row, "answer": answer}
     return parsed
 
 
@@ -279,11 +283,46 @@ def provider_chat(messages, schema):
     raise ModelError("CQA_PROVIDER должен быть ollama или llamacpp.")
 
 
+def numbered_turns(conversation):
+    return [{"n": index, "timestamp": turn["timestamp"], "speaker": turn["speaker"], "text": turn["text"]}
+            for index, turn in enumerate(conversation["transcript"], 1)]
+
+
+def validate_batch_results(payload, records):
+    require(isinstance(payload, dict) and isinstance(payload.get("results"), list)
+            and 1 <= len(payload["results"]) <= 500, "Нужен пакет с непустым массивом results.")
+    require(isinstance(payload.get("errors", []), list), "Поле errors должно быть массивом.")
+    by_id = {record["conversation_id"]: record for record in extract_records(records)}
+    verified, seen = [], set()
+    for result in payload["results"]:
+        require(isinstance(result, dict) and isinstance(result.get("conversation_id"), str), "В оценке отсутствует ID диалога.")
+        cid = result["conversation_id"]
+        require(cid in by_id and cid not in seen, f"{cid}: диалог не загружен или оценка дублируется.")
+        seen.add(cid)
+        turns = numbered_turns(by_id[cid])
+        rubric = validate_rubric(result.get("rubric"))
+        audit = result.get("audit")
+        require(isinstance(audit, dict) and all(filled(audit.get(key), 200)
+                for key in ("model", "provider", "prompt", "created_at")), f"{cid}: отсутствуют данные запуска.")
+        created_at = audit["created_at"]
+        try:
+            datetime.fromisoformat(created_at[:-1] + "+00:00" if created_at.endswith("Z") else created_at)
+        except ValueError:
+            raise ValueError(f"{cid}: неверная дата запуска.") from None
+        require(audit.get("input_sha256") == fingerprint(turns) and audit.get("rubric_sha256") == fingerprint(rubric),
+                f"{cid}: хеш транскрипта или чек-листа отличается.")
+        judgments = validate_judgments(result.get("judgments"), rubric, len(turns))
+        score = calculate(rubric, {key: row["answer"] for key, row in judgments.items()})
+        require(result.get("score") == score, f"{cid}: сохранённые баллы не совпадают с пересчётом.")
+        verified.append({"conversation_id": cid, "judgments": judgments, "rubric": rubric, "score": score, "audit": audit})
+    return {"results": verified, "failed": len(payload.get("errors", []))}
+
+
 def score_conversation(conversation, rubric, chat=provider_chat):
+    started = perf_counter()
     validate_conversation(conversation)
     validate_rubric(rubric)
-    turns = [{"n": index, "timestamp": turn["timestamp"], "speaker": turn["speaker"], "text": turn["text"]}
-             for index, turn in enumerate(conversation["transcript"], 1)]
+    turns = numbered_turns(conversation)
     schema = response_schema(rubric, len(turns))
     criteria = [
         {**{key: value for key, value in item.items() if key not in ("weight", "section")},
@@ -302,7 +341,7 @@ def score_conversation(conversation, rubric, chat=provider_chat):
         usage["completion_tokens"] += response.get("eval_count") or 0
         try:
             raw = json.loads(response["message"]["content"])
-            judgments = parse_model_judgments(raw, rubric, len(turns))
+            judgments = validate_judgments(raw, rubric, len(turns), model_answers=True)
             break
         except (KeyError, TypeError, ValueError) as error:
             if attempt == 2:
@@ -315,5 +354,6 @@ def score_conversation(conversation, rubric, chat=provider_chat):
         "rubric": rubric,
         "audit": {"model": response.get("model") or model_name(), "provider": provider_name(), "prompt": PROMPT_VERSION,
                   "rubric_sha256": fingerprint(rubric), "input_sha256": fingerprint(turns),
-                  "created_at": datetime.now(timezone.utc).isoformat(), "attempts": attempt, **usage},
+                  "created_at": datetime.now(timezone.utc).isoformat(),
+                  "elapsed_seconds": round(perf_counter() - started, 3), "attempts": attempt, **usage},
     }

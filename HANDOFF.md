@@ -1,6 +1,6 @@
 # CQA Hackathon — agent and team handoff
 
-Updated 2026-11-07 (Asia/Qyzylorda). This handoff covers the initial implementation and the consultation calibration branch for the Freedom Broker Data Challenge.
+Updated 2026-11-07 (Asia/Qyzylorda). This handoff covers the implementation, consultation calibration, and control-run preparation for the Freedom Broker Data Challenge.
 
 ## Repository and access
 
@@ -17,6 +17,7 @@ Updated 2026-11-07 (Asia/Qyzylorda). This handoff covers the initial implementat
 | `CQA_Chat_Quality_Checklist.pdf` and `tg_image_2529044409.png` | The image points to the separate checklist. Its eight criteria, four N/A gates, two discrete scales, proportional weights, rounding and independent critical flag are encoded in `rubric.json` and `engine.py`. |
 | `IMG_3695.MP4` | 15-second phone screen recording opening the guide’s DEV API link and showing the JSON response. Sampled frames show Cyrillic rendered incorrectly by the phone viewer. The Python importer reads the response as UTF-8. The audio track is effectively silent. |
 | `Data 2 (1) 1.pdf` | Five-page Freedom Holding company overview. Context for the domain. The starter evaluates the transcript and checklist, and has no approved operations-policy reference. |
+| `dev_dialogues.json` | User-supplied offline copy of the DEV API response. Parsed JSON is identical to the retrieved response, including all 65 transcript records. |
 | User’s top-50 criteria | Accuracy against organizer labels on 10 unseen transcripts comes first. Other considerations are useful features, usability, live analysis and diversity of architectures. The materials give no official score-distance formula or label file. |
 
 DEV retrieval was verified from the signed organizer endpoint. It returned **65 records, 60 chats and 5 calls**. Languages were **35 RU, 15 KZ and 15 EN**. Transcripts have 11–115 turns and use `client`, `operator`, `bot`, and `system`. The starter keeps timestamp strings as provided. On the original machine, the correctly decoded response is `../dev-utf8.json` relative to the checkout and the signed link is in `../dev-url.txt`. Store copies in an ignored `data/` directory if needed. Share organizer materials only through the team’s approved data channel. Raw data, signed URLs, audio, weights and runtime logs stay outside Git.
@@ -28,12 +29,12 @@ DEV retrieval was verified from the signed organizer endpoint. It returned **65 
 | [README.md](README.md) | Setup for Ollama or llama.cpp, architecture diagram, DEV and control commands, label format, and demo steps. |
 | [rubric.json](rubric.json) | Default Russian rubric. Each criterion has an ID, label, section, type, rule, weight, and optional N/A condition. Scales list numeric levels and anchors. |
 | [engine.py](engine.py) | Validate imports and rubrics, call the model with the current checklist and numbered turns, validate each answer and evidence range, calculate the final score, and add provenance. Both adapters are local. |
-| [app.py](app.py) | Standard-library loopback HTTP server. `GET /api/config`, `POST /api/import`, `/api/rubric`, `/api/score` and `/api/recalculate`. |
+| [app.py](app.py) | Standard-library loopback HTTP server. `GET /api/config`, `POST /api/import`, `/api/import-results`, `/api/rubric`, `/api/score` and `/api/recalculate`. |
 | [web/index.html](web/index.html), [web/app.js](web/app.js), [web/style.css](web/style.css) | Browser workspace with import, filters, transcript and audio link, rubric editing and export, criterion scores, evidence links, per-dialogue run history, and appeal review. |
-| [batch.py](batch.py) | `fetch`, `score`, `compare`. Each batch writes raw judgments, rubric/input hashes, totals, provider/model, token counts, and per-dialogue errors. Comparison reports criterion agreement, N/A disagreement, missing IDs and total MAE. |
+| [batch.py](batch.py) | `fetch`, `score`, `compare`. Batches can require an exact input count and resume a matching checkpoint. Output records judgments, input and rubric hashes, provider, model, prompt, duration, token counts, and errors. Comparison reports criterion agreement, false and missed N/A, missing IDs, and total MAE. |
 | [examples/synthetic.json](examples/synthetic.json) | Three invented dialogues, one per language, with no customer data and no precomputed scores. |
 | [examples/consultation-cases.json](examples/consultation-cases.json) | Four invented dialogues for the consultation applicability regression. The expected levels are documented below and stay outside the model input. |
-| [tests/test_cqa.py](tests/test_cqa.py) | Seven checks covering validation, changed rubrics, proportional N/A/scale math, independent flags, review recalculation, evidence bounds and model failure. |
+| [tests/test_cqa.py](tests/test_cqa.py) | Eleven checks covering rubric math, evidence, resume and lock behavior, expected input counts, and import rejection for mismatched transcripts or altered totals. |
 | [HANDOFF.md](HANDOFF.md) | This record of decisions, status, verification, and next work. |
 
 ## Design sketch and decisions
@@ -51,7 +52,7 @@ Qwen3-4B Q4_K_M is the initial local model candidate. The engine requests schema
 
 ## Verification and limits
 
-- Run `python -m unittest discover -s tests -v` and `node --check web/app.js`. Both passed on the calibration branch with eight automated tests. The API adapter retrieved and validated all 65 DEV records.
+- Run `python -m unittest discover -s tests -v` and `node --check web/app.js`. Both passed on the control-readiness branch with eleven automated tests. The API and browser accepted all 65 DEV records.
 - The original Chrome smoke test used Qwen3-4B Q4_K_M through llama.cpp Vulkan build 11719. A fresh synthetic RU chat returned all eight judgments in about 38 seconds. The evidence link highlighted the referenced turn. A test appeal preserved the 100.00 original and changed the final to 92.31. The rubric editor saved an added criterion, and both scores survived reload. Live Ollama, full DEV scoring, and a successful long-call run remain open.
 - The baseline marked consultation N/A even though the customer asked an explicit tariff question in turn 1. It cited the closing turn. Evidence bounds and valid JSON allowed the result. See the paired calibration below.
 - No organizer Ground Truth was available in the attachments or DEV response. There is no challenge accuracy result. The team must label a development set and keep it separate from the 10 unseen controls.
@@ -87,6 +88,18 @@ python batch.py score examples/consultation-cases.json --output runs/consultatio
 ```
 
 Run the two batches sequentially on a single-slot model server. Compare `judgments.consultation.answer` with the table. Keep the candidate in review until it has been evaluated against independently labeled DEV transcripts. Score the baseline and candidate against the same holdout and inspect both total MAE and criterion errors.
+
+## Control-run readiness
+
+The `ops/control-readiness` branch adds an exact record-count gate, atomic checkpoints, and `--resume` with input, rubric, prompt, provider, model and model-revision checks. A failed or unfinished record is retried while completed records are retained. Use a separate output path when the rubric or model changes. A process-scoped file lock prevents two scorers from writing the same checkpoint.
+
+The browser can import a saved CLI batch after importing its transcripts. It verifies the transcript and rubric hashes, judgment types, evidence bounds, and recalculated points. Imported cards are labeled as CLI runs. In isolated Chrome, a genuine model result imported and survived reload, importing it again added zero copies, and a modified total was rejected. The user-supplied `dev_dialogues.json` added all 65 DEV records alongside three built-in examples. The current demo can show the imported batch and still score a newly edited rubric live.
+
+Local six-chat DEV diagnostic used two seeded selections per language. The provisional reference was written from the transcripts and rubric before opening model outputs. It is one assistant review pass and needs independent adjudication. V3 returned **5/6** usable scores, with **6.454/100** total-score MAE on the five paired rows. Exact agreement was **3/5** for consultation, **0/5** for closing, **1/5** for needs, and **4/5** for the critical flag. One English after-hours paid advice offer was missed. One Kazakh chat timed out at 420 seconds while the model generated over 1,800 tokens. These are DEV diagnostics, with organizer Ground Truth still pending.
+
+The 115-turn call was used to measure a compact prompt candidate on the local tokenizer. Input content fell from **9,713 to 4,824 tokens** while retaining all 115 turns. The candidate remains under test and is separate from the control-readiness branch. To continue the DEV comparison locally, use `../dev-review-six.json`, `../dev-review-six-labels.json`, `../dev-review-six-notes.md`, `../dev-review-v3-cuda.json`, and `../dev-review-v3-cuda-metrics.json`. The verified Windows CUDA runtime is under `../runtime-cuda-b11719/`. This material stays local.
+
+Control validation requires the organizer's 10 transcripts and the scoring reference when released. The commands are in [README.md](README.md#контрольный-запуск). Before the code freeze, run the full control batch, check all ten rows and the empty error list, rehearse the five-minute flow with the replacement criterion, and record the commit and model revision. Public submission requires the organizer's submission channel and the team's decision to publish.
 
 ## Parallel work plan
 

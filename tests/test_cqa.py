@@ -1,10 +1,16 @@
 import copy
+import io
 import json
 import unittest
+from contextlib import redirect_stdout
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 from unittest.mock import patch
 
-from batch import compare
-from engine import DEFAULT_RUBRIC, ModelError, calculate, extract_records, local_json_post, read_json, score_conversation, validate_rubric
+from batch import compare, reserve_checkpoint, run_batch, write_json
+from engine import (DEFAULT_RUBRIC, ModelError, calculate, extract_records, local_json_post, read_json,
+                    score_conversation, validate_batch_results, validate_rubric)
 
 SAMPLE = read_json("examples/synthetic.json")
 ANSWERS = dict(greeting="yes", needs="na", identity="na", consultation=15,
@@ -89,6 +95,63 @@ class ChecklistTests(unittest.TestCase):
             with self.assertRaisesRegex(ModelError, "420"):
                 local_json_post("http://127.0.0.1:8080", "/score", {}, "Test")
             self.assertEqual(send.call_args.kwargs["timeout"], 420)
+
+    def test_resume_retries_only_failed_records_and_checks_provenance(self):
+        records = extract_records(SAMPLE)
+        ids = [record["conversation_id"] for record in records]
+        with TemporaryDirectory(dir=".") as scratch, redirect_stdout(io.StringIO()):
+            input_path = Path(scratch) / "input.json"
+            output_path = Path(scratch) / "out.json"
+            write_json(input_path, records)
+            args = SimpleNamespace(input=input_path, output=output_path, rubric=None, resume=False,
+                                   expect_count=3, model_revision="model-test")
+            first, second, third = ({"conversation_id": cid} for cid in ids)
+            with patch("batch.score_conversation", side_effect=[first, ModelError("unavailable"), third]):
+                self.assertEqual(run_batch(args), 1)
+            self.assertEqual(read_json(output_path)["errors"][0]["conversation_id"], ids[1])
+            args.resume = True
+            with patch("batch.score_conversation", return_value=second) as score:
+                self.assertEqual(run_batch(args), 0)
+                score.assert_called_once_with(records[1], DEFAULT_RUBRIC)
+            checkpoint = read_json(output_path)
+            self.assertEqual(checkpoint["results"], [first, second, third])
+            self.assertEqual(checkpoint["errors"], [])
+            args.model_revision = "changed"
+            with self.assertRaisesRegex(ValueError, "provenance differs"):
+                run_batch(args)
+            args.expect_count = 10
+            with self.assertRaisesRegex(ValueError, "Expected 10"):
+                run_batch(args)
+            self.assertEqual(read_json(output_path), checkpoint)
+
+    def test_batch_checkpoint_has_one_writer(self):
+        with TemporaryDirectory(dir=".") as scratch:
+            output = Path(scratch) / "out.json"
+            with reserve_checkpoint(output), self.assertRaisesRegex(ValueError, "Another batch"):
+                with reserve_checkpoint(output):
+                    self.fail("A second writer acquired the lock")
+            with reserve_checkpoint(output):
+                pass
+
+    def test_batch_import_checks_transcript_scores_and_evidence(self):
+        sample = extract_records(SAMPLE)[0]
+        judgments = {key: {"answer": str(value), "reason": "Проверено.", "evidence": [{"start": 1, "end": 2}]}
+                     for key, value in ANSWERS.items()}
+        result = score_conversation(sample, DEFAULT_RUBRIC, lambda *_: {"message": {"content": json.dumps(judgments)}})
+        payload = {"results": [result], "errors": [{"conversation_id": "incomplete"}]}
+        self.assertEqual(validate_batch_results(payload, [sample]), {"results": [result], "failed": 1})
+        changed = copy.deepcopy(sample)
+        changed["transcript"][0]["text"] += " Дополнение."
+        with self.assertRaisesRegex(ValueError, "хеш"):
+            validate_batch_results(payload, [changed])
+        invalid = copy.deepcopy(payload)
+        invalid["results"][0]["score"]["total"] = 100
+        with self.assertRaisesRegex(ValueError, "баллы"):
+            validate_batch_results(invalid, [sample])
+        invalid = copy.deepcopy(payload)
+        invalid["results"][0]["judgments"]["greeting"]["evidence"][0]["end"] = 99
+        with self.assertRaisesRegex(ValueError, "пределы"):
+            validate_batch_results(invalid, [sample])
 
 
 if __name__ == "__main__":

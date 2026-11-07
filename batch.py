@@ -1,21 +1,51 @@
 """Import organizer transcripts, score a batch, or compare against human labels."""
 import argparse
 import json
+import os
 import re
+from contextlib import contextmanager
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit, urlunsplit
 from urllib.request import urlopen
 
-from engine import DEFAULT_RUBRIC, ModelError, calculate, extract_records, fingerprint, read_json, require, score_conversation, validate_rubric
+from engine import (DEFAULT_RUBRIC, PROMPT_VERSION, ModelError, calculate, extract_records,
+                    fingerprint, model_name, provider_name, read_json, require,
+                    score_conversation, validate_rubric)
 
 
 def write_json(path, result):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(path.name + ".tmp")
-    temporary.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    temporary.replace(path)
+    temporary = None
+    try:
+        with NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent, delete=False) as stream:
+            temporary = Path(stream.name)
+            json.dump(result, stream, ensure_ascii=False, indent=2)
+            stream.write("\n")
+        temporary.replace(path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
+@contextmanager
+def reserve_checkpoint(path):
+    """Hold an OS lock for one batch writer, released even if the process exits."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = path.with_name(path.name + ".lock")
+    with lock_path.open("a+b") as lock:
+        try:
+            if os.name == "nt":
+                import msvcrt
+                msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as error:
+            raise ValueError(f"Another batch is writing {path.name}.") from error
+        yield
 
 
 def fetch_dataset(args):
@@ -39,16 +69,42 @@ def fetch_dataset(args):
 def run_batch(args):
     records = extract_records(read_json(args.input))
     rubric = validate_rubric(read_json(args.rubric) if args.rubric else DEFAULT_RUBRIC)
-    output = {"rubric_sha256": fingerprint(rubric), "results": [], "errors": []}
-    for index, conversation in enumerate(records, 1):
-        try:
-            output["results"].append(score_conversation(conversation, rubric))
-            print(f"{index}/{len(records)} scored", flush=True)
-        except ModelError as error:
-            output["errors"].append({"conversation_id": conversation["conversation_id"], "error": str(error)})
-            print(f"{index}/{len(records)} failed", flush=True)
-        write_json(args.output, output)
-    return 1 if output["errors"] else 0
+    if args.expect_count is not None:
+        require(len(records) == args.expect_count, f"Expected {args.expect_count} transcripts, received {len(records)}.")
+    destination = Path(args.output).resolve()
+    inputs = [args.input, args.rubric] if args.rubric else [args.input]
+    require(destination not in {Path(path).resolve() for path in inputs}, "Choose an output path separate from the inputs.")
+    run = {"dataset_sha256": fingerprint(records), "record_count": len(records), "rubric_sha256": fingerprint(rubric),
+           "prompt": PROMPT_VERSION, "provider": provider_name(), "model": model_name(), "model_revision": args.model_revision}
+    ids = [record["conversation_id"] for record in records]
+    with reserve_checkpoint(destination):
+        results, errors = {}, {}
+        if args.resume and destination.exists():
+            checkpoint = read_json(destination)
+            require(isinstance(checkpoint, dict) and checkpoint.get("run") == run,
+                    "Checkpoint provenance differs. Use the original settings or a new output file.")
+            for name, rows_by_id in (("results", results), ("errors", errors)):
+                for row in checkpoint[name]:
+                    cid = row["conversation_id"]
+                    require(cid in ids and cid not in rows_by_id, "Checkpoint has an unexpected or duplicate ID.")
+                    rows_by_id[cid] = row
+            require(not results.keys() & errors.keys(), "Checkpoint contains both a result and an error for a transcript.")
+        for index, conversation in enumerate(records, 1):
+            cid = conversation["conversation_id"]
+            if cid in results:
+                print(f"{index}/{len(records)} already scored", flush=True)
+                continue
+            try:
+                results[cid] = score_conversation(conversation, rubric)
+                errors.pop(cid, None)
+                print(f"{index}/{len(records)} scored", flush=True)
+            except ModelError as error:
+                errors[cid] = {"conversation_id": cid, "error": str(error)}
+                print(f"{index}/{len(records)} failed", flush=True)
+            write_json(destination, {"run": run, "rubric_sha256": run["rubric_sha256"],
+                                     "results": [results[cid] for cid in ids if cid in results],
+                                     "errors": [errors[cid] for cid in ids if cid in errors]})
+        return 1 if errors else 0
 
 
 def compare(results, labels, rubric):
@@ -97,6 +153,9 @@ def main():
     score.add_argument("input")
     score.add_argument("--rubric")
     score.add_argument("--output", required=True)
+    score.add_argument("--expect-count", type=int, help="Require this many input records before calling the model.")
+    score.add_argument("--model-revision", help="Record the pinned model revision or weights checksum.")
+    score.add_argument("--resume", action="store_true", help="Reuse completed results for the same input and configuration.")
     compare_parser = commands.add_parser("compare")
     compare_parser.add_argument("predictions")
     compare_parser.add_argument("labels")
@@ -114,6 +173,8 @@ def main():
             return 1 if report["missing_ids"] or report["unexpected_ids"] else 0
     except (OSError, KeyError, TypeError, ValueError) as error:
         parser.exit(2, f"Error: {error}\n")
+    except KeyboardInterrupt:
+        parser.exit(130, "Interrupted. Completed batch results are in the output checkpoint.\n")
     return 0
 
 
