@@ -12,6 +12,7 @@
   <script src="/brand-orbit.js" defer></script>
   <script src="/welcome.js" defer></script>
   <script src="/brand-ascii.js" defer></script>
+  <script src="/ascii-titles.js" defer></script>
 </head>
 <body data-view="start" data-review-tab="dialogue">
   <canvas class="orbit-field" aria-hidden="true"></canvas>
@@ -31,7 +32,7 @@
   </header>
   <main>
     <div class="page-heading">
-      <h1 id="workspace-title" data-verse>Аудит диалогов</h1>
+      <h1 id="workspace-title" class="ascii-title ascii-title-hero" data-ascii-title="Аудит диалогов" aria-label="Аудит диалогов"><span class="ascii-title-text">Аудит диалогов</span><canvas class="ascii-title-canvas" aria-hidden="true"></canvas></h1>
       <nav class="app-nav" aria-label="Основная навигация">
         <button type="button" data-view="dialogues" aria-current="false">
           <span class="nav-icon nav-icon-dialogues" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path class="nav-bubble" d="M4 5h16v11H9l-5 4V5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path class="nav-message-lines" d="M8 9h8m-8 3h5" pathLength="100" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>
@@ -60,7 +61,7 @@
     </section>
     <section id="dialogues-view" class="library" hidden aria-labelledby="library-title">
       <header class="view-heading">
-        <h2 id="library-title">Диалоги</h2>
+        <h2 id="library-title" class="ascii-title ascii-title-section" data-ascii-title="Диалоги" aria-label="Диалоги"><span class="ascii-title-text">Диалоги</span><canvas class="ascii-title-canvas" aria-hidden="true"></canvas></h2>
         <div class="actions">
           <label class="button upload primary icon-button" title="Загрузить диалоги">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 16V4m-4 4 4-4 4 4M5 15v5h14v-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>

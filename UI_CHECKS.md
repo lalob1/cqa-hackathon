@@ -39,3 +39,9 @@ The dialogue heading has no count, scored/AI-error aggregate totals are removed,
 The F and all three coin types now use actual extruded geometry. Model data, GLB headers and unit normals were checked. The 3D coin browser sample reported about 8% script time on one local core. The current coin paths and trails are invisible.
 
 The final entry dissolve is 1,250 ms, followed by a 540 ms workspace reveal. It uses staggered drift and extra fine particles. A later Chrome check found seven running nav animations, confirmed animated checklist opening and soft-blue copy/heading colors, and verified three app views at 320/390/681/768/1024/1440 px without overflow or JavaScript errors.
+
+## Bright ASCII headings
+
+Аудит диалогов and Диалоги now render in larger, brighter blue ASCII lettering with glow, a moving highlight and stable letter shapes. The main title wraps into two lines on narrow screens. Accessible heading names and a readable text fallback remain.
+
+A targeted Chrome check verified animated blue pixels in both headings, one accessible heading for each title, no title rendering on startup, same-row upload alignment, and no horizontal overflow at 320, 390, 681, 768, 1024 and 1440 px. No JavaScript errors occurred. Pixel readback during QA generated two Chrome performance advisories; normal rendering does not perform those repeated title-canvas readbacks.

@@ -39,6 +39,7 @@ DEV retrieval was verified from the signed organizer endpoint. It returned **65 
 | [tools/build_f_model.py](tools/build_f_model.py), [tools/build_coin_models.py](tools/build_coin_models.py) | Dependency-free Python model builders. The coin builder also deterministically rebuilds the F through its shared helper import. Tracked model assets require no build to run the app. |
 | [web/welcome.js](web/welcome.js) | Interactive green ASCII F built from the approved 3D model, brief hover scatter-and-return, keyboard pulse, and a full-viewport dissolve overlay. |
 | [web/brand-ascii.js](web/brand-ascii.js) | Larger deep-blue animated ASCII Democrats wordmark at top left, replacing CQA Desk and the duplicate right-side team label. |
+| [web/ascii-titles.js](web/ascii-titles.js) | Shared bright-blue ASCII renderer for Аудит диалогов and Диалоги, with dense glyphs, light sweeps, hover illumination and responsive word wrapping. |
 | [batch.py](batch.py) | `fetch`, `score`, `compare`, `export`. Batches can require an exact input count and resume a matching checkpoint. Output records judgments, input and rubric hashes, provider, model, prompt, duration, token counts, and errors. Comparison reports criterion agreement, false and missed N/A, missing IDs, and total MAE. Export validates and writes the organizer format. |
 | [examples/synthetic.json](examples/synthetic.json) | Three invented dialogues, one per language, with no customer data and no precomputed scores. |
 | [examples/consultation-cases.json](examples/consultation-cases.json) | Four invented dialogues for the consultation applicability regression. The expected levels are documented below and stay outside the model input. |
@@ -111,6 +112,14 @@ Earlier crown, blue-app and 2D F previews are historical checkpoints. In particu
 ## Component motion and blue text
 
 The interface copy now uses a subtle blue tint (`#d5e6ff`), with a slightly stronger blue heading (`#b8d7ff`). Green ASCII art and semantic status colors retain their purpose. Navigation has three raised animated icon tiles: speech-bubble motion for Диалоги, a drawing checkmark for Оценка, and staggered checks for Чек-лист. Dialogue tiles, the upload arrow, filter chips, editor fields, criterion details and the import menu have hover, press or reveal motion. The user requested continuous motion; no stop-animation control is present. Chrome found seven running infinite nav animations, verified the checklist reveal and slower entry, and checked all three app views at 320, 390, 681, 768, 1024 and 1440 px without horizontal overflow or JavaScript errors.
+
+## Prominent ASCII headings
+
+The user requested more visible, hero-style treatment for **Аудит диалогов** and **Диалоги**, including ASCII lettering. Both app headings now use dense, brighter blue glyphs with a restrained blue glow. The main title has a larger display area and a softly lit underline. At narrow widths it renders on two lines. The dialogue section heading is larger and stays on the same row as the upload control, including at 320 px. The approved startup screen still shows only the green ASCII F and arrow.
+
+The shared renderer in `web/ascii-titles.js` uses one 24 fps loop, caps DPR at 1.5 and pauses when headings are hidden or the tab is hidden. It keeps stable letter silhouettes while characters shuffle and a light sweep moves through them. Pointer movement adds local illumination. Accessible heading names and plain-text fallbacks are retained. The main title no longer uses the earlier word-print wrapper; the quality heading still does.
+
+Chrome verified both headings had visible bright-blue pixels, changing animation output, exactly one accessible heading for each name, no rendering behind startup, and same-row upload alignment at 320, 390, 681, 768, 1024 and 1440 px. No horizontal overflow or JavaScript errors occurred. The two console advisories came from the QA pixel-readback probes.
 
 ## Verification and limits
 
