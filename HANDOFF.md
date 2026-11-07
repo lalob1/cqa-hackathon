@@ -81,6 +81,10 @@ The user approved the 3D F before requesting true 3D coins. This state is preser
 
 Before the user requested hiding their paths, the approved 3D coins are saved on `checkpoint/3d-coins-with-orbits-2026-11-08`. `tools/build_coin_models.py` builds three beveled, reeded cylinder meshes with raised symbols on both faces: tenge (500 triangles, 29,960-byte GLB), dollar (1,012 triangles, 53,232-byte GLB), and euro (908 triangles, 48,764-byte GLB). The native renderer loads `web/coin-models.json`; the reusable exports are `web/coin-tenge.glb`, `web/coin-dollar.glb`, and `web/coin-euro.glb`. The F model bytes remain identical to its approved checkpoint. A Chrome check verified both symbol faces, depth spans of 0.386–0.392, continuous painted mesh surfaces, drag and keyboard pulse, five viewport widths, and zero JavaScript errors. The local three-second sample painted 68 scene frames and reported about 8% script time on one core; this is not a low-end-device benchmark. Fully covered coin meshes are skipped behind opaque app cards.
 
+## Cleaner dialogue list and invisible paths
+
+The user approved hiding the coin orbit lines. The current renderer draws neither orbit guides nor coin trails; orbital positions and 3D rotation remain active. The user then requested removing list clutter. The dialogue heading has no count, aggregate scored/AI-error totals are removed, upload is a 44 px icon with an accessible file-input label, healthy scores have no Оценён caption, and row/transcript metadata contains only RU, KZ or EN. Critical warnings and the critical-only filter remain. Chrome verified native file upload, an unchanged 93.75 score, language-only metadata, square upload controls at 320/390/1440 px, no horizontal overflow, and no JavaScript errors. This state is preserved on `checkpoint/clean-dialogues-2026-11-08` before the startup-screen experiment.
+
 ## Verification and limits
 
 - Run `python -m unittest discover -s tests -v` and `node --check web/app.js`. Both passed with thirteen automated tests. The API and browser accepted all 65 DEV records.

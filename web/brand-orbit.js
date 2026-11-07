@@ -86,92 +86,6 @@
     ctx.fillRect(x - .8, y - .8, 1.6, 1.6);
   }
 
-  function ring(orbit, view, front) {
-    ctx.lineWidth = .7;
-    ctx.strokeStyle = front ? "rgba(123,208,242,.20)" : "rgba(93,172,217,.10)";
-    ctx.beginPath();
-    let connected = false;
-    for (let i = 0; i <= 144; i++) {
-      const p = project(position(orbit, i / 144 * tau), view);
-      if ((p.z > 0) !== front) { connected = false; continue; }
-      if (!connected) ctx.moveTo(p.x, p.y);
-      else ctx.lineTo(p.x, p.y);
-      connected = true;
-    }
-    ctx.stroke();
-  }
-
-  function flatCoin(item, view) {
-    const {p, id, angle, orbit} = item;
-    // A short light trail follows each actual orbital path.
-    for (let j = 16; j > 0; j--) {
-      const direction = Math.sign(orbit.speed);
-      const a = project(position(orbit, angle - j * .009 * direction), view);
-      const b = project(position(orbit, angle - (j - 1) * .009 * direction), view);
-      ctx.lineWidth = .6 + (1 - j / 16) * 1.1;
-      ctx.strokeStyle = "rgba(119,216,235," + (1 - j / 17) * .25 + ")";
-      ctx.beginPath();
-      ctx.moveTo(a.x, a.y);
-      ctx.lineTo(b.x, b.y);
-      ctx.stroke();
-    }
-    const size = clamp(view.radius * .047, 9, 22) * p.perspective;
-    const face = .26 + .74 * Math.abs(Math.cos(elapsed * .50 + id * 1.9));
-    const alpha = p.z > 0 ? .76 : .35;
-    ctx.save();
-    ctx.translate(p.x, p.y);
-    ctx.rotate(Math.sin(elapsed * .14 + id) * .22);
-    ctx.globalAlpha = alpha;
-    // Offset rim, milled edge, warm metal face and an inset stamped currency.
-    ctx.fillStyle = "#79531f";
-    ctx.beginPath();
-    ctx.ellipse(2.8, 1.4, size * face, size, 0, 0, tau);
-    ctx.fill();
-    ctx.strokeStyle = "#e0ad4e";
-    ctx.lineWidth = 1.1;
-    for (let i = -4; i <= 4; i++) {
-      const y = i / 5 * size;
-      const x = Math.sqrt(size * size - y * y) * face;
-      ctx.beginPath();
-      ctx.moveTo(x - .2, y);
-      ctx.lineTo(x + 2.7, y + 1.3);
-      ctx.stroke();
-    }
-    ctx.scale(face, 1);
-    const metal = ctx.createLinearGradient(-size, -size, size, size);
-    metal.addColorStop(0, "#fff0b7");
-    metal.addColorStop(.27, "#e8c06e");
-    metal.addColorStop(.56, "#b88635");
-    metal.addColorStop(.8, "#edcf89");
-    metal.addColorStop(1, "#a5752b");
-    ctx.fillStyle = metal;
-    ctx.beginPath();
-    ctx.arc(0, 0, size, 0, tau);
-    ctx.fill();
-    ctx.strokeStyle = "#ffe9aa";
-    ctx.lineWidth = .9;
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(0, 0, size * .77, 0, tau);
-    ctx.strokeStyle = "#805c2f8c";
-    ctx.lineWidth = .8;
-    ctx.stroke();
-    ctx.font = "600 " + size * 1.07 + "px ui-monospace, Consolas, monospace";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    const currency = ["₸", "$", "€"][id % 3];
-    ctx.fillStyle = "#fff0b7a6";
-    ctx.fillText(currency, -.5, 1);
-    ctx.fillStyle = "#795221";
-    ctx.fillText(currency, 0, .4);
-    ctx.restore();
-    const sparkle = Math.pow(.5 + .5 * Math.sin(elapsed * 1.3 + id * 2.1), 14);
-    if (sparkle > .25 && p.z > 0) {
-      glow(p.x - size * .35, p.y - size * .7, size, sparkle * .16);
-      glint(p.x - size * .35, p.y - size * .7, 3 + sparkle * 4, sparkle * .65, true);
-    }
-  }
-
   function rotation(x, y, z) {
     const cy = Math.cos(y), sy = Math.sin(y);
     const cx = Math.cos(x), sx = Math.sin(x);
@@ -185,20 +99,9 @@
   }
 
   function coin(item, view) {
-    if (!coinModels) return flatCoin(item, view);
+    if (!coinModels) return;
     const {p, id, angle, orbit} = item;
     const center = position(orbit, angle);
-    for (let j = 16; j > 0; j--) {
-      const direction = Math.sign(orbit.speed);
-      const a = project(position(orbit, angle - j * .009 * direction), view);
-      const b = project(position(orbit, angle - (j - 1) * .009 * direction), view);
-      ctx.lineWidth = .6 + (1 - j / 16) * 1.1;
-      ctx.strokeStyle = "rgba(119,216,235," + (1 - j / 17) * .25 + ")";
-      ctx.beginPath();
-      ctx.moveTo(a.x, a.y);
-      ctx.lineTo(b.x, b.y);
-      ctx.stroke();
-    }
     const radius = clamp(view.radius * .052, 10, 25);
     const screenRadius = radius * p.perspective;
     const margin = screenRadius * 1.6 + 24;
@@ -394,7 +297,6 @@
     const coins = [];
     let id = 0;
     for (const orbit of orbits) {
-      ring(orbit, view, false);
       for (let i = 0; i < orbit.count; i++) {
         const angle = orbitTime * orbit.speed + i / orbit.count * tau + id * .34;
         coins.push({p: project(position(orbit, angle), view), id, angle, orbit});
@@ -404,7 +306,6 @@
     coins.sort((a, b) => a.p.z - b.p.z);
     for (const item of coins) if (item.p.z <= 0) coin(item, view);
     mark(view);
-    for (const orbit of orbits) ring(orbit, view, true);
     for (const item of coins) if (item.p.z > 0) coin(item, view);
 
     const age = elapsed - pulseAt;

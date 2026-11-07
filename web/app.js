@@ -3,7 +3,6 @@
 const $ = (id) => document.getElementById(id);
 const storageKey = "cqa-workspace-v1";
 const roles = {client: "Клиент", operator: "Оператор", bot: "Бот", system: "Система"};
-const turnPlural = new Intl.PluralRules("ru");
 const svgNamespace = "http://www.w3.org/2000/svg";
 const roleArtwork = {
   client: '<circle class="glyph-halo" cx="14" cy="11" r="8" stroke="currentColor" opacity=".26"/><circle class="glyph-head" cx="14" cy="10" r="3.4" fill="currentColor"/><path d="M7 21c.4-4 3.1-6 7-6s6.6 2 7 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
@@ -175,10 +174,7 @@ function conversationIcon(channel) {
 function renderList() {
   const list = $("conversation-list");
   const search = $("filter").value.toLowerCase().trim();
-  let scoredCount = 0;
-  let criticalCount = 0;
   list.replaceChildren();
-  $("record-count").textContent = workspace.records.length;
   for (const button of document.querySelectorAll("[data-list-filter]")) {
     button.setAttribute("aria-pressed", String(button.dataset.listFilter === listFilter));
   }
@@ -186,25 +182,22 @@ function renderList() {
     const run = workspace.runs[index]?.at(-1);
     const latest = run?.original;
     const critical = Object.values(latest?.score.flags ?? {}).some(Boolean);
-    if (latest) scoredCount += 1;
-    if (critical) criticalCount += 1;
     if (!(conversation.conversation_id + " " + conversation.language).toLowerCase().includes(search)) continue;
     if ($("critical-only").checked && !critical) continue;
     if (listFilter === "pending" && latest) continue;
     const button = node("button", undefined, "record");
     button.type = "button";
     button.dataset.recordIndex = String(index);
-    const channel = conversation.channel === "voice call" ? "Звонок" : "Чат";
     const copy = node("span", undefined, "record-copy");
     const preview = conversation.transcript.find(turn => turn.speaker === "client")?.text
       ?? conversation.transcript[0]?.text ?? "";
     copy.append(node("span", conversation.conversation_id, "record-title"),
       node("span", preview, "record-preview"),
-      node("span", conversation.language + " · " + channel + " · " + conversation.transcript.length + " репл.", "record-meta"));
+      node("span", conversation.language, "record-meta"));
     const end = node("span", undefined, "record-end" + (critical ? " attention" : ""));
     if (latest) {
-      end.append(node("span", scoreText((run.finalScore || latest.score).total), "record-score"),
-        node("span", critical ? "Ошибка ИИ" : "Оценён", "record-state" + (critical ? " attention" : "")));
+      end.append(node("span", scoreText((run.finalScore || latest.score).total), "record-score"));
+      if (critical) end.append(node("span", "Ошибка ИИ", "record-state attention"));
     } else {
       end.append(node("span", undefined, "record-chevron"));
     }
@@ -212,8 +205,6 @@ function renderList() {
     button.addEventListener("click", () => openRecord(index));
     list.append(button);
   }
-  $("workspace-scored").textContent = scoredCount;
-  $("workspace-critical").textContent = criticalCount;
   if (!list.childElementCount) list.append(node("p",
     workspace.records.length ? "Нет диалогов по этому фильтру." : "Загрузите диалоги, чтобы начать проверку.", "empty"));
 }
@@ -225,9 +216,7 @@ function renderTranscript() {
   $("turn-overview").hidden = !conversation?.transcript.length;
   $("evidence-note").hidden = true;
   $("transcript-title").textContent = conversation?.conversation_id ?? "Выберите диалог";
-  const count = conversation?.transcript.length ?? 0;
-  const turnLabel = {one: "реплика", few: "реплики"}[turnPlural.select(count)] ?? "реплик";
-  $("conversation-meta").textContent = conversation ? conversation.language + " · " + count + " " + turnLabel : "";
+  $("conversation-meta").textContent = conversation?.language ?? "";
   $("audio").hidden = !conversation?.audio_url;
   if (!conversation) return;
   if (conversation.audio_url) $("audio").href = conversation.audio_url;

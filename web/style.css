@@ -43,6 +43,7 @@ button svg, .button svg, summary svg { width: 21px; height: 21px; flex: none; }
 .text-button:hover { background: #183451; }
 .actions { display: flex; align-items: center; flex-wrap: wrap; gap: .55rem; }
 .upload { position: relative; }
+.upload.icon-button { width: 44px; min-width: 44px; padding: 0; }
 .upload input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: inherit; }
 .orbit-field, .orbit-stage { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; }
 .orbit-field { pointer-events: none; }
@@ -77,9 +78,6 @@ p { margin: .5rem 0; line-height: 1.5; }
 .library, .editor, .review-view { animation: view-enter 240ms ease-out; }
 .library { max-width: 1050px; margin-inline: auto; }
 .view-heading { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.3rem; }
-.count { display: inline-block; margin-left: .3rem; color: #9ab7d9; font-size: .87rem; font-weight: 500; }
-.workspace-stats { display: flex; flex-wrap: wrap; gap: .9rem; margin: .45rem 0 0; color: #a2b9d2; font-size: .77rem; }
-.workspace-stats b { color: #d7e9fc; font-weight: 500; margin-left: .2rem; font-variant-numeric: tabular-nums; }
 .import-menu { position: relative; }
 .import-menu > summary { list-style: none; width: 44px; padding: .6rem; background: #1f3b58; }
 .import-menu > summary::-webkit-details-marker { display: none; }
@@ -271,12 +269,8 @@ textarea { min-height: 5rem; resize: vertical; line-height: 1.55; }
   .app-nav button svg { display: block; width: 22px; height: 22px; }
   .app-nav button[aria-current="page"] { background: transparent; color: #9edcff; }
   .view-heading { gap: .8rem; margin-bottom: 1rem; }
-  .library .view-heading { align-items: flex-start; }
   .library .view-heading > .actions { gap: .4rem; }
-  .library .upload.primary { min-height: 42px; gap: .35rem; padding-inline: .7rem; font-size: .73rem; }
-  .library .upload.primary svg { width: 16px; height: 16px; }
   .import-menu > summary { min-height: 42px; width: 36px; padding: .4rem; }
-  .workspace-stats { gap: .65rem; font-size: .66rem; }
   .list-tools { gap: .8rem; }
   .search-field { max-width: none; flex-basis: 100%; padding-block: .85rem; }
   .search-field input { font-size: 16px; }
@@ -309,8 +303,5 @@ textarea { min-height: 5rem; resize: vertical; line-height: 1.55; }
   .editor-item > summary { padding-inline: 1rem; font-size: .84rem; }
 }
 @media (max-width: 370px) {
-  .library .view-heading { align-items: center; }
-  .library .view-heading > .actions { width: 100%; }
-  .library .upload.primary { flex: 1; }
   .team-name { display: none; }
 }
