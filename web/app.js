@@ -5,6 +5,14 @@ const storageKey = "cqa-workspace-v1";
 const roles = {client: "Клиент", operator: "Оператор", bot: "Бот", system: "Система"};
 const turnPlural = new Intl.PluralRules("ru");
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+const motionPreferenceKey = "cqa-motion-v1";
+const svgNamespace = "http://www.w3.org/2000/svg";
+const roleArtwork = {
+  client: '<circle class="glyph-halo" cx="14" cy="11" r="8" stroke="currentColor" opacity=".26"/><circle class="glyph-head" cx="14" cy="10" r="3.4" fill="currentColor"/><path d="M7 21c.4-4 3.1-6 7-6s6.6 2 7 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+  operator: '<path d="M6.7 15v-1.9a7.3 7.3 0 0 1 14.6 0v1.9M21 18v1a3 3 0 0 1-3 3h-3" stroke="currentColor" stroke-width="1.65" stroke-linecap="round"/><g class="glyph-cups" fill="currentColor"><rect x="5.5" y="13.5" width="4.5" height="6.5" rx="1.8"/><rect x="18" y="13.5" width="4.5" height="6.5" rx="1.8"/></g><circle cx="14.5" cy="22" r="1.1" fill="currentColor"/>',
+  bot: '<rect x="6" y="8" width="16" height="13" rx="4" stroke="currentColor" stroke-width="1.6"/><path d="M14 5v3m-3 6v1m6-1v1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+  system: '<path d="M7 9h14M7 14h14M7 19h9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>'
+};
 const answerText = (value) => ({yes: "Да", no: "Нет", na: "N/A"})[value] ?? String(value);
 const scoreText = (value) => value === null ? "—" : value.toFixed(2);
 let defaults, workspace, selected, historyIndex, busy = false;
@@ -15,6 +23,38 @@ function node(tag, text, className) {
   if (text !== undefined) element.textContent = text;
   if (className) element.className = className;
   return element;
+}
+
+function motionEnabled() {
+  return document.documentElement.dataset.motion === "on";
+}
+
+function setupMotion() {
+  let choice;
+  try { choice = localStorage.getItem(motionPreferenceKey); } catch { /* The preference is still usable in this tab. */ }
+  const sync = () => {
+    const enabled = choice === "on" || (choice !== "off" && !reducedMotion.matches);
+    document.documentElement.dataset.motion = enabled ? "on" : "off";
+    $("motion-label").textContent = enabled ? "Остановить анимацию" : "Включить анимацию";
+  };
+  $("motion-toggle").addEventListener("click", () => {
+    choice = motionEnabled() ? "off" : "on";
+    try { localStorage.setItem(motionPreferenceKey, choice); } catch { /* Keep the choice for this tab. */ }
+    sync();
+  });
+  reducedMotion.addEventListener("change", sync);
+  sync();
+}
+
+function speakerBadge(speaker) {
+  const badge = node("span", undefined, "role-icon role-" + speaker);
+  badge.setAttribute("aria-hidden", "true");
+  const icon = document.createElementNS(svgNamespace, "svg");
+  icon.setAttribute("viewBox", "0 0 28 28");
+  icon.setAttribute("fill", "none");
+  icon.innerHTML = roleArtwork[speaker];
+  badge.append(icon);
+  return badge;
 }
 
 function status(message, isError = false) {
@@ -155,7 +195,9 @@ function renderTranscript() {
     item.tabIndex = -1;
     const meta = node("div", undefined, "turn-meta");
     meta.append(node("span", roles[turn.speaker], "speaker"), node("small", turn.timestamp), node("small", "#" + (index + 1), "turn-index"));
-    item.append(meta, node("p", turn.text));
+    const content = node("div", undefined, "turn-content");
+    content.append(meta, node("p", turn.text));
+    item.append(speakerBadge(turn.speaker), content);
     $("turns").append(item);
     $("turn-rail").append(node("span", undefined, turn.speaker));
   }
@@ -167,10 +209,12 @@ function showEvidence(span) {
     const marked = index + 1 >= span.start && index + 1 <= span.end;
     turn.classList.toggle("marked", marked);
     rail[index].classList.toggle("marked", marked);
-    if (marked && !reducedMotion.matches) {
-      const delay = Math.min(index + 1 - span.start, 5) * 35;
+    if (marked && motionEnabled()) {
+      const delay = Math.min(index + 1 - span.start, 5) * 55;
       rail[index].animate([{transform: "scaleY(.65)", opacity: .55}, {transform: "scaleY(1.6)"}, {transform: "scaleY(1)", opacity: 1}],
-        {duration: 300, delay, easing: "ease-out"});
+        {duration: 430, delay, easing: "ease-out"});
+      turn.animate([{backgroundColor: "#fffbef"}, {backgroundColor: "#ffe0a4", offset: .35}, {backgroundColor: "#fff4d8"}],
+        {duration: 710, delay, easing: "ease-out"});
     }
   }
   $("evidence-note").textContent = span.start === span.end
@@ -179,17 +223,16 @@ function showEvidence(span) {
   $("evidence-note").hidden = false;
   const target = $("message-" + span.start);
   target.focus({preventScroll: true});
-  target.scrollIntoView({block: "nearest", behavior: reducedMotion.matches ? "instant" : "smooth"});
+  target.scrollIntoView({block: "nearest", behavior: motionEnabled() ? "smooth" : "instant"});
 }
 
 function scoreMeter(value) {
-  const namespace = "http://www.w3.org/2000/svg";
-  const ring = document.createElementNS(namespace, "svg");
+  const ring = document.createElementNS(svgNamespace, "svg");
   ring.setAttribute("viewBox", "0 0 44 44");
   ring.setAttribute("aria-hidden", "true");
   ring.classList.add("score-meter");
   for (const className of ["meter-track", "meter-value"]) {
-    const circle = document.createElementNS(namespace, "circle");
+    const circle = document.createElementNS(svgNamespace, "circle");
     circle.setAttribute("cx", "22");
     circle.setAttribute("cy", "22");
     circle.setAttribute("r", "17");
@@ -308,6 +351,9 @@ function renderResult(openCriterion, reveal = false) {
   }
   const pane = $("results");
   pane.replaceChildren();
+  const visualScore = run ? (run.finalScore || run.original.score).total : null;
+  $("visual-score").textContent = scoreText(visualScore);
+  $("visual-score-fill").setAttribute("stroke-dasharray", (visualScore ?? 0) + " 100");
   if (!run) {
     const empty = node("div", undefined, "empty-result");
     empty.append(node("p", "Оценка ещё не запущена", "empty-title"), node("p", "После запуска здесь появятся баллы и ссылки на реплики.", "empty"));
@@ -326,7 +372,7 @@ function renderResult(openCriterion, reveal = false) {
   const meter = scoreMeter(final.total);
   totals.append(total, meter, initial);
   pane.append(totals);
-  if (reveal && !reducedMotion.matches) {
+  if (reveal && motionEnabled()) {
     totals.animate([{opacity: .65, transform: "translateY(5px)"}, {opacity: 1, transform: "translateY(0)"}],
       {duration: 240, easing: "ease-out"});
     meter.querySelector(".meter-value").animate([{strokeDashoffset: "100"}, {strokeDashoffset: String(100 - (final.total ?? 0))}],
@@ -421,6 +467,7 @@ function readEditor() {
 }
 
 async function boot() {
+  setupMotion();
   const config = await api("/api/config");
   defaults = config.rubric;
   $("model").textContent = config.model;
