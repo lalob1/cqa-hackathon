@@ -7,6 +7,7 @@
   <title>CQA Desk / Аудит диалогов</title>
   <link rel="stylesheet" href="/style.css">
   <script src="/app.js" defer></script>
+  <script src="/presentation.js" defer></script>
 </head>
 <body>
   <header class="masthead">
@@ -24,25 +25,11 @@
       </div>
     </div>
   </header>
-  <div class="background-signal" aria-hidden="true">
-    <svg viewBox="0 0 82 20" fill="none">
-      <defs>
-        <linearGradient id="packet-wake">
-          <stop stop-color="#6d9cd7" stop-opacity="0"/>
-          <stop offset="1" stop-color="#4e82be" stop-opacity=".82"/>
-        </linearGradient>
-      </defs>
-      <path d="M2 10h63M31 14h23" stroke="url(#packet-wake)" stroke-width="1.4" stroke-linecap="round"/>
-      <path d="m68 5 5 5-5 5-5-5z" fill="#d9f2ff" stroke="#4977b6" stroke-width="1.25"/>
-      <path d="M68 10h9m-3-3 3 3-3 3" stroke="#5886bf" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>
-  </div>
+  <canvas class="comet-field" aria-hidden="true"></canvas>
   <main>
     <section class="overview" aria-labelledby="workspace-title">
       <div class="overview-copy">
-        <p class="eyebrow">FREEDOM BROKER / DATA CHALLENGE</p>
-        <h1 id="workspace-title">Аудит диалогов</h1>
-        <p class="overview-description">Проверьте оценку по репликам диалога.</p>
+        <h1 id="workspace-title" data-verse>Аудит диалогов</h1>
       </div>
       <svg class="review-visual" viewBox="0 0 548 196" aria-hidden="true">
         <defs>
@@ -106,7 +93,7 @@
     </section>
     <div class="workspace">
       <aside class="panel library" aria-labelledby="library-title">
-        <header class="panel-heading"><h2 id="library-title">Диалоги <span class="count" id="record-count">0</span></h2></header>
+        <header class="panel-heading"><h2 id="library-title"><span data-verse>Диалоги</span> <span class="count" id="record-count">0</span></h2></header>
         <label for="filter">Поиск по ID или языку</label>
         <input type="search" id="filter" placeholder="Например, KZ">
         <label class="filter-toggle"><input type="checkbox" id="critical-only"> Только грубые ошибки ИИ</label>
@@ -114,7 +101,7 @@
       </aside>
       <section class="panel transcript" aria-labelledby="transcript-title">
         <header class="panel-heading">
-          <p class="eyebrow">Транскрипт</p>
+          <p class="eyebrow" data-verse>Транскрипт</p>
           <h2 id="transcript-title">Выберите диалог</h2>
           <div class="transcript-tools"><p id="conversation-meta"></p><a class="audio-link" id="audio" target="_blank" rel="noopener noreferrer" hidden>Открыть запись звонка ↗</a></div>
         </header>
@@ -134,7 +121,7 @@
               <path class="quality-check" d="m10 16 2.8 2.8 5.2-5.4" pathLength="100" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </span>
-          <h2 id="score-title">Оценка качества</h2>
+          <h2 id="score-title" data-verse>Оценка качества</h2>
         </header>
         <div class="actions scoring-actions">
           <button type="button" id="score" disabled>Оценить диалог</button>
