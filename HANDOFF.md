@@ -33,7 +33,12 @@ DEV retrieval was verified from the signed organizer endpoint. It returned **65 
 | [app.py](app.py) | Standard-library loopback HTTP server. `GET /api/config`, `POST /api/import`, `/api/import-results`, `/api/rubric`, `/api/score` and `/api/recalculate`. |
 | [web/index.html](web/index.html), [web/app.js](web/app.js), [web/style.css](web/style.css) | Browser workspace with import, filters, transcript and audio link, rubric editing and export, criterion scores, evidence links, per-dialogue run history, and appeal review. |
 | [web/presentation.js](web/presentation.js) | Native word reveal on load and hover, separate from scoring and review. |
-| [web/brand-orbit.js](web/brand-orbit.js), [web/f-mark.svg](web/f-mark.svg) | The current F-and-coins background experiment: a vector version of the supplied mark, floating/turning light sweep, eleven metallic currency coins in three inclined orbits, drag rotation, click/keyboard pulse and brief acceleration. Native Canvas, 30 fps and DPR 1.5 caps, hidden-tab pause. |
+| [web/brand-orbit.js](web/brand-orbit.js) | The approved 3D F and eleven true 3D currency coins behind the app. Orbit guides and trails are invisible. Drag and keyboard pulse remain. Pauses during the welcome screen and while hidden. |
+| [web/f-mark.svg](web/f-mark.svg), [web/f-model.json](web/f-model.json), [web/f-model.glb](web/f-model.glb) | Vector source and 334-triangle extruded, beveled F shield. The JSON and GLB carry matching geometry. |
+| [web/coin-models.json](web/coin-models.json) | Meshes for tenge, dollar and euro coins: thickness, beveled/reeded rims, and raised symbols on both faces. Individual GLB exports are alongside this file. |
+| [tools/build_f_model.py](tools/build_f_model.py), [tools/build_coin_models.py](tools/build_coin_models.py) | Dependency-free Python model builders. The coin builder also deterministically rebuilds the F through its shared helper import. Tracked model assets require no build to run the app. |
+| [web/welcome.js](web/welcome.js) | Interactive green ASCII F built from the approved 3D model, brief hover scatter-and-return, keyboard pulse, and a full-viewport dissolve overlay. |
+| [web/brand-ascii.js](web/brand-ascii.js) | Larger deep-blue animated ASCII Democrats wordmark at top left, replacing CQA Desk and the duplicate right-side team label. |
 | [batch.py](batch.py) | `fetch`, `score`, `compare`, `export`. Batches can require an exact input count and resume a matching checkpoint. Output records judgments, input and rubric hashes, provider, model, prompt, duration, token counts, and errors. Comparison reports criterion agreement, false and missed N/A, missing IDs, and total MAE. Export validates and writes the organizer format. |
 | [examples/synthetic.json](examples/synthetic.json) | Three invented dialogues, one per language, with no customer data and no precomputed scores. |
 | [examples/consultation-cases.json](examples/consultation-cases.json) | Four invented dialogues for the consultation applicability regression. The expected levels are documented below and stay outside the model input. |
@@ -84,6 +89,28 @@ Before the user requested hiding their paths, the approved 3D coins are saved on
 ## Cleaner dialogue list and invisible paths
 
 The user approved hiding the coin orbit lines. The current renderer draws neither orbit guides nor coin trails; orbital positions and 3D rotation remain active. The user then requested removing list clutter. The dialogue heading has no count, aggregate scored/AI-error totals are removed, upload is a 44 px icon with an accessible file-input label, healthy scores have no Оценён caption, and row/transcript metadata contains only RU, KZ or EN. Critical warnings and the critical-only filter remain. Chrome verified native file upload, an unchanged 93.75 score, language-only metadata, square upload controls at 320/390/1440 px, no horizontal overflow, and no JavaScript errors. This state is preserved on `checkpoint/clean-dialogues-2026-11-08` before the startup-screen experiment.
+
+## Current startup screen and branding
+
+Every visit opens the welcome screen, including a first visit that seeds the three synthetic examples. The green F is rendered from visible ASCII characters using the approved 3D geometry. The startup title and entry caption are visually removed; a 56 px arrow-only button has an accessible name and opens the existing app. The top-left brand is a larger, deep-blue animated ASCII **Democrats** wordmark. The duplicate team name on the right is removed; the model status remains.
+
+The final hover behavior is a brief outward scatter followed by a direct return to each character's live position, taking about 0.75–0.855 seconds. Keep this behavior; the later request reverted the longer particle-orbit experiments. Drag still tilts the F, and clicking or pressing Enter produces a light pulse.
+
+Entry brightens and disperses the ASCII mark for 1,250 ms on a dedicated canvas fixed to the entire viewport at z-index 100. The release uses staggered character timing, a gentler drift and extra fine glyph particles. The overlay preserves the F's original screen position and lets characters travel beyond the logo widget. It is removed when the dialogue view opens; the app then fades/slides into view over 540 ms. The coin background pauses on startup and resumes after entry. The ASCII hero pauses after leaving startup. Both scenes pause in hidden tabs; the compact header wordmark remains animated whenever visible.
+
+Chrome verified changing ASCII output, hover character release and complete return, the icon-only entry control, keyboard operation, an overlay matching the full 1440×960 viewport, particles outside the original logo bounds, overlay cleanup, and successful entry. First-visit examples and existing browser data survived the flow. Startup fit 320, 390, 768, 1024 and 1440 px; the arrow stayed above the fold. No browser JavaScript errors occurred.
+
+Current deliverables in the original workspace's `outputs/` directory:
+- `CQA_Welcome_Preview.png`, `CQA_Welcome_Mobile.png`, `CQA_Welcome_Hover.png`, `CQA_Welcome_Transition.png`: current startup, scatter and full-screen transition.
+- `CQA_ASCII_Welcome.gif`: five-second browser capture of the current startup and entry, using three synthetic examples.
+- `CQA_Desk_Preview.png`: current clean dialogue list and 3D background.
+- `CQA_3D_Models.zip`: F and the three reusable self-contained GLB coin models, with their README.
+- `CQA_AGENT_HANDOFF.md` and `CQA_UI_Checks.md`: standalone handoff and checks.
+Earlier crown, blue-app and 2D F previews are historical checkpoints. In particular, `CQA_F_Coins_Motion.gif` is the earlier 2D preview rather than the current 3D/startup implementation.
+
+## Component motion and blue text
+
+The interface copy now uses a subtle blue tint (`#d5e6ff`), with a slightly stronger blue heading (`#b8d7ff`). Green ASCII art and semantic status colors retain their purpose. Navigation has three raised animated icon tiles: speech-bubble motion for Диалоги, a drawing checkmark for Оценка, and staggered checks for Чек-лист. Dialogue tiles, the upload arrow, filter chips, editor fields, criterion details and the import menu have hover, press or reveal motion. The user requested continuous motion; no stop-animation control is present. Chrome found seven running infinite nav animations, verified the checklist reveal and slower entry, and checked all three app views at 320, 390, 681, 768, 1024 and 1440 px without horizontal overflow or JavaScript errors.
 
 ## Verification and limits
 

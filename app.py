@@ -14,6 +14,8 @@ FILES = {
     "/": (WEB / "index.html", "text/html; charset=utf-8"),
     "/app.js": (WEB / "app.js", "text/javascript; charset=utf-8"),
     "/presentation.js": (WEB / "presentation.js", "text/javascript; charset=utf-8"),
+    "/welcome.js": (WEB / "welcome.js", "text/javascript; charset=utf-8"),
+    "/brand-ascii.js": (WEB / "brand-ascii.js", "text/javascript; charset=utf-8"),
     "/brand-orbit.js": (WEB / "brand-orbit.js", "text/javascript; charset=utf-8"),
     "/f-mark.svg": (WEB / "f-mark.svg", "image/svg+xml"),
     "/f-model.json": (WEB / "f-model.json", "application/json"),

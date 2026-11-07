@@ -289,6 +289,7 @@
   }
 
   function draw() {
+    if (document.body.dataset.view === "start") return;
     ctx.clearRect(0, 0, width, height);
     const view = scene();
     opaqueRects = Array.from(document.querySelectorAll(".panel, .list-group"))
@@ -387,10 +388,11 @@
   function syncVisibility() {
     cancelAnimationFrame(request);
     previous = 0;
-    if (!document.hidden) request = requestAnimationFrame(animate);
+    if (!document.hidden && document.body.dataset.view !== "start") request = requestAnimationFrame(animate);
   }
   resize();
   logo.addEventListener("load", draw);
   document.addEventListener("visibilitychange", syncVisibility);
+  document.addEventListener("cqa:view-change", syncVisibility);
   syncVisibility();
 })();

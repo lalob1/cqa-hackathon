@@ -68,6 +68,7 @@ function setReviewTab(tab) {
 }
 
 function showView(view, tab) {
+  $("start-view").hidden = view !== "start";
   $("dialogues-view").hidden = view !== "dialogues";
   $("review-view").hidden = view !== "review";
   $("editor").hidden = view !== "checklist";
@@ -80,6 +81,7 @@ function showView(view, tab) {
   if (tab) setReviewTab(tab);
   if (view === "dialogues" && workspace) renderList();
   window.scrollTo({top: 0, behavior: "instant"});
+  document.dispatchEvent(new Event("cqa:view-change"));
 }
 
 function openRecord(index) {
@@ -96,7 +98,7 @@ function selectRecord(index) {
   renderResult();
 }
 
-async function importPayload(payload, label) {
+async function importPayload(payload, label, openView = true) {
   if (busy) return;
   const records = await api("/api/import", {payload});
   if (busy) return;
@@ -114,7 +116,7 @@ async function importPayload(payload, label) {
   $("critical-only").checked = false;
   listFilter = "all";
   selectRecord(first);
-  showView("dialogues");
+  if (openView) showView("dialogues");
   persist(label + " · новых диалогов " + additions.length);
 }
 
@@ -512,7 +514,30 @@ async function boot() {
   workspace ??= {rubric: defaults, records: [], runs: {}};
   fillEditor(workspace.rubric);
   selectRecord(0);
-  if (!workspace.records.length) await importPayload(await api("/synthetic.json"), "Синтетические примеры загружены");
+  if (!workspace.records.length) await importPayload(await api("/synthetic.json"), "Синтетические примеры загружены", false);
+  $("enter-workspace").disabled = false;
+  $("enter-workspace").addEventListener("click", async () => {
+    const button = $("enter-workspace");
+    if (button.disabled) return;
+    button.disabled = true;
+    const exitDuration = 1250;
+    $("ascii-stage").dispatchEvent(new CustomEvent("ascii:exit", {detail: {duration: exitDuration}}));
+    const departure = button.animate([
+      {transform: "scale(1)", opacity: 1, boxShadow: "0 0 0 rgba(120,242,153,0)"},
+      {transform: "scale(.90)", opacity: 1, offset: .16, boxShadow: "0 0 36px rgba(120,242,153,.42)"},
+      {transform: "translateX(12px) scale(1.12)", opacity: 0, boxShadow: "0 0 52px rgba(120,242,153,0)"}
+    ], {duration: exitDuration, easing: "cubic-bezier(.3,.05,.2,1)", fill: "forwards"});
+    await departure.finished;
+    showView("dialogues");
+    departure.cancel();
+    button.disabled = false;
+    document.querySelector("main").animate([
+      {opacity: 0, transform: "translateY(20px) scale(.99)", filter: "blur(5px)"},
+      {opacity: .95, transform: "translateY(2px) scale(1)", filter: "blur(.5px)", offset: .65},
+      {opacity: 1, transform: "none", filter: "blur(0)"}
+    ], {duration: 540, easing: "cubic-bezier(.18,.8,.2,1)"});
+    $("filter").focus({preventScroll: true});
+  });
   $("filter").addEventListener("input", renderList);
   $("critical-only").addEventListener("change", () => {
     listFilter = $("critical-only").checked ? "critical" : "all";

@@ -27,3 +27,15 @@ Organizer Ground Truth and the ten official control chats are still unavailable.
 The approved application layout is retained. The crown and equation are replaced with a transparent vector F shield and eleven metallic coins on three inclined orbits. The F has its own float, turn, breathing scale and clipped light sweep. The background stays at z-index 0 and the app at 1. Dragging rotates the orbits; click/Enter produces a wave and a temporary speed increase.
 
 A further Chrome check captured 90 changing F transforms in three seconds, verified keyboard pulse drawing and continuous autoplay, and repeated all three views at the five widths above. No JavaScript errors occurred. A local three-second script-time sample was approximately 5% of one core; no new runtime library was added. The six-second motion GIF is a browser capture for review.
+
+## Current startup, wordmark and cleaned list
+
+The current entry screen has an interactive green ASCII F and an arrow-only entry control. Its visible title and button caption are removed. The header uses a larger animated deep-blue ASCII Democrats wordmark on the left. Hovered characters scatter briefly and return in about 0.75–0.855 seconds. The longer orbit experiments were reverted.
+
+A targeted Chrome check verified character release and return, animated wordmark pixels, keyboard activation, a full-viewport dissolve layer with characters outside the original widget, overlay cleanup, entry to the existing workspace, first-visit examples, and preservation of stored data. The welcome and app backgrounds alternate rather than rendering together. Widths 320, 390, 768, 1024 and 1440 fit; the entry arrow stayed above the fold. No JavaScript errors occurred.
+
+The dialogue heading has no count, scored/AI-error aggregate totals are removed, upload is an accessible 44 px icon, healthy scores have no Оценён caption, and metadata shows only the language. Native upload worked and the 93.75 test score stayed unchanged. Critical warnings and filtering remain.
+
+The F and all three coin types now use actual extruded geometry. Model data, GLB headers and unit normals were checked. The 3D coin browser sample reported about 8% script time on one local core. The current coin paths and trails are invisible.
+
+The final entry dissolve is 1,250 ms, followed by a 540 ms workspace reveal. It uses staggered drift and extra fine particles. A later Chrome check found seven running nav animations, confirmed animated checklist opening and soft-blue copy/heading colors, and verified three app views at 320/390/681/768/1024/1440 px without overflow or JavaScript errors.

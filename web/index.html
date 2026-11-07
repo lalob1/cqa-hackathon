@@ -4,29 +4,27 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#081327">
-  <title>CQA Desk / Аудит диалогов</title>
+  <title>Democrats / Аудит диалогов</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/style.css">
   <script src="/app.js" defer></script>
   <script src="/presentation.js" defer></script>
   <script src="/brand-orbit.js" defer></script>
+  <script src="/welcome.js" defer></script>
+  <script src="/brand-ascii.js" defer></script>
 </head>
-<body data-view="dialogues" data-review-tab="dialogue">
+<body data-view="start" data-review-tab="dialogue">
   <canvas class="orbit-field" aria-hidden="true"></canvas>
   <button class="orbit-stage" id="orbit-stage" type="button"
     aria-label="Фоновая анимация: потяните для вращения, нажмите для импульса.">
   </button>
   <header class="masthead">
     <div class="masthead-inner">
-      <a class="brand" href="/" aria-label="CQA Desk, главная">
-        <svg width="25" height="25" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path d="M5 5h14v11H9l-4 3V5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
-          <path d="m9 10 2 2 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        <span>CQA <span class="brand-light">Desk</span></span>
+      <a class="brand ascii-brand" href="/" aria-label="Democrats, главная">
+        <canvas id="brand-ascii" aria-hidden="true"></canvas>
+        <span class="sr-only">Democrats</span>
       </a>
       <div class="masthead-context">
-        <span class="team-name">Democrats</span>
         <span class="model" aria-label="Настроенная модель"><span class="dot"></span><span id="model">Локальная модель</span></span>
       </div>
     </div>
@@ -35,22 +33,32 @@
     <div class="page-heading">
       <h1 id="workspace-title" data-verse>Аудит диалогов</h1>
       <nav class="app-nav" aria-label="Основная навигация">
-        <button type="button" data-view="dialogues" aria-current="page">
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 5h16v11H9l-5 4V5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M8 9h8m-8 3h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        <button type="button" data-view="dialogues" aria-current="false">
+          <span class="nav-icon nav-icon-dialogues" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path class="nav-bubble" d="M4 5h16v11H9l-5 4V5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path class="nav-message-lines" d="M8 9h8m-8 3h5" pathLength="100" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>
           <span>Диалоги</span>
         </button>
         <button type="button" data-view="review" aria-current="false">
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 4h10v2h3v15H4V6h3V4Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="m8 13 3 3 5-6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="nav-icon nav-icon-review" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M7 4h10v2h3v15H4V6h3V4Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path class="nav-score-check" d="m8 13 3 3 5-6" pathLength="100" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
           <span>Оценка</span>
         </button>
         <button type="button" data-view="checklist" id="toggle-rubric" aria-current="false" aria-expanded="false" aria-controls="editor">
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m4 6 1.5 1.5L8 4m-4 9 1.5 1.5L8 11m-4 9 1.5 1.5L8 18M12 6h8m-8 7h8m-8 7h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="nav-icon nav-icon-checklist" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><g stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path class="nav-list-tick" d="m4 6 1.5 1.5L8 4" pathLength="100"/><path class="nav-list-tick" d="m4 13 1.5 1.5L8 11" pathLength="100"/><path class="nav-list-tick" d="m4 20 1.5 1.5L8 18" pathLength="100"/><path class="nav-list-lines" d="M12 6h8m-8 7h8m-8 7h8"/></g></svg></span>
           <span>Чек-лист</span>
         </button>
       </nav>
     </div>
     <p id="status" role="status" aria-live="polite"></p>
-    <section id="dialogues-view" class="library" aria-labelledby="library-title">
+    <section id="start-view" aria-labelledby="workspace-title">
+      <button id="ascii-stage" class="ascii-stage" type="button" aria-label="Вращайте ASCII-логотип F. Нажмите для светового импульса.">
+        <canvas id="ascii-canvas" aria-hidden="true"></canvas>
+      </button>
+      <div class="start-actions">
+        <button type="button" id="enter-workspace" class="primary start-button" aria-label="Открыть диалоги" title="Открыть диалоги" disabled>
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 12h15m-6-6 6 6-6 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+    </section>
+    <section id="dialogues-view" class="library" hidden aria-labelledby="library-title">
       <header class="view-heading">
         <h2 id="library-title">Диалоги</h2>
         <div class="actions">
