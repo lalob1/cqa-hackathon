@@ -45,16 +45,7 @@ h1 { margin: .25rem 0 .45rem; font-size: clamp(1.85rem, 4vw, 2.9rem); line-heigh
 h2 { margin: 0; font-size: 1.18rem; line-height: 1.22; letter-spacing: -.02em; overflow-wrap: anywhere; }
 p { margin: .45rem 0; line-height: 1.5; }
 .overview p:last-child { max-width: 38rem; margin-bottom: 0; color: #d0ddf5; font-size: .91rem; }
-.audit-signal { position: absolute; top: 50%; right: 3%; width: clamp(195px, 28vw, 290px); transform: translateY(-50%); pointer-events: none; }
-.signal-frame { fill: #142341; stroke: #2a4167; }
-.signal-grid { stroke: #273d61; opacity: .66; stroke-dasharray: 1 5; }
-.signal-route { stroke: #5372a4; stroke-width: 1.5; }
-.signal-flow { stroke: #a8c8ff; stroke-width: 2; stroke-dasharray: 14 86; opacity: 0; }
-.signal-input { stroke: #7699d6; stroke-width: 3; stroke-linecap: round; }
-.signal-target { fill: #1d355a; stroke: #7ba0e4; }
-.signal-check { stroke: #bed5ff; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
-.signal-point { fill: #e7bb75; }
-.overview.is-scoring .signal-flow { opacity: 1; animation: trace 1.6s linear infinite; }
+.ascii-orbit { position: absolute; top: 50%; right: 1%; width: clamp(230px, 29vw, 365px); height: auto; transform: translateY(-50%); pointer-events: none; }
 
 .workbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .7rem 1.25rem; margin: .9rem 0 .4rem; }
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; }
@@ -139,6 +130,7 @@ textarea { resize: vertical; min-height: 4rem; }
 .evidence-note { color: #7c4b17; font-size: .76rem; font-weight: 650; }
 
 .scoring-actions { margin: -.15rem 0 .75rem; }
+#score.is-scoring { background: linear-gradient(110deg, #274477, #4a73bd, #274477) 0 0 / 220% 100%; animation: trace 1.5s linear infinite; }
 #history-label { display: flex; align-items: center; gap: .28rem; }
 #history { width: auto; }
 .empty-result { border: 1px dashed #cbd5e5; border-radius: .75rem; background: #f7f9fd; padding: .78rem; }
@@ -176,7 +168,7 @@ form.review { display: grid; gap: .45rem; margin-top: .48rem; border-left: 2px s
 .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: .55rem; padding-top: .65rem; }
 .wide { grid-column: 1 / -1; }
 
-@keyframes trace { from { stroke-dashoffset: 14; } to { stroke-dashoffset: -86; } }
+@keyframes trace { to { background-position: -220% 0; } }
 @media (max-width: 940px) {
   .workspace { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .library { grid-column: 1 / -1; border-bottom: 1px solid var(--line); }
@@ -190,12 +182,12 @@ form.review { display: grid; gap: .45rem; margin-top: .48rem; border-left: 2px s
   .overview { min-height: 9.3rem; }
   .overview-copy { max-width: 74%; padding-block: .9rem; }
   .overview p:last-child { font-size: .83rem; }
-  .audit-signal { right: -.9rem; width: 8rem; opacity: .72; mask-image: linear-gradient(90deg, transparent, #000 32%); }
+  .ascii-orbit { right: -2.1rem; width: 10.8rem; opacity: .88; }
   .model { max-width: 8.5rem; }
   #model { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #turns { max-height: 47vh; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .overview.is-scoring .signal-flow { animation: none; opacity: 0; }
+  #score.is-scoring { animation: none; }
   .turn { transition: none; }
 }

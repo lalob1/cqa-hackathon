@@ -7,6 +7,7 @@
   <title>CQA Desk / Аудит диалогов</title>
   <link rel="stylesheet" href="/style.css">
   <script src="/app.js" defer></script>
+  <script src="/ascii-orbit.js" type="module"></script>
 </head>
 <body>
   <header class="masthead">
@@ -31,16 +32,7 @@
         <h1 id="workspace-title">Аудит диалогов</h1>
         <p>Проверяйте оценки по репликам и сохраняйте решения по апелляциям.</p>
       </div>
-      <svg class="audit-signal" viewBox="0 0 310 130" fill="none" aria-hidden="true">
-        <rect class="signal-frame" x="1" y="1" width="308" height="128" rx="17"/>
-        <path class="signal-grid" d="M25 34h260M25 65h260M25 96h260"/>
-        <path class="signal-route" d="M76 42h32c19 0 20 23 41 23h14M76 88h32c19 0 20-23 41-23h14m44 0h64"/>
-        <path class="signal-flow" pathLength="100" d="M76 42h32c19 0 20 23 41 23h14M76 88h32c19 0 20-23 41-23h14m44 0h64"/>
-        <path class="signal-input" d="M31 42h36M45 57h22m-36 31h36m-22 15h22"/>
-        <circle class="signal-target" cx="185" cy="65" r="23"/>
-        <path class="signal-check" d="m176 65 6 6 12-13"/>
-        <circle class="signal-point" cx="271" cy="65" r="4"/>
-      </svg>
+      <canvas class="ascii-orbit" width="720" height="350" data-ascii-orbit aria-hidden="true"></canvas>
     </section>
     <div class="workbar">
       <div class="actions work-actions" aria-label="Действия с диалогами">

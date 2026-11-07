@@ -296,7 +296,7 @@ function renderResult(openCriterion, reveal = false) {
   const run = runs[historyIndex];
   $("score").disabled = busy || !workspace.records[selected];
   $("score").textContent = busy ? "Оценка выполняется…" : "Оценить диалог";
-  document.querySelector(".overview").classList.toggle("is-scoring", busy);
+  $("score").classList.toggle("is-scoring", busy);
   $("history-label").hidden = runs.length < 2;
   $("history").replaceChildren();
   for (const [index, entry] of runs.entries()) {

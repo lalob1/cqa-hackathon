@@ -13,6 +13,7 @@ MAX_BODY = 8 * 1024 * 1024
 FILES = {
     "/": (WEB / "index.html", "text/html; charset=utf-8"),
     "/app.js": (WEB / "app.js", "text/javascript; charset=utf-8"),
+    "/ascii-orbit.js": (WEB / "ascii-orbit.js", "text/javascript; charset=utf-8"),
     "/style.css": (WEB / "style.css", "text/css; charset=utf-8"),
     "/synthetic.json": (ROOT / "examples" / "synthetic.json", "application/json"),
 }
