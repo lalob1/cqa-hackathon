@@ -105,6 +105,8 @@ The 115-turn call was used to measure a compact prompt prototype on the local to
 
 Control scoring requires the organizer's 10 transcripts or the assigned control group. The organizer holds the Ground Truth for judging. The commands are in [README.md](README.md#контрольный-запуск). Before the code freeze, run the full control batch, verify the ten original IDs and an empty error list, rehearse the five-minute flow with the replacement criterion, and record the commit and model revision. Public submission requires the organizer's submission channel and the team's decision to publish.
 
+A ten-chat synthetic rehearsal used the same live Qwen V4 and the release scorer and exporter. It completed in **2 min 27 s**, produced **10 rows and 80 criterion judgments with zero errors**, and preserved every ID and evidence turn bound. Resuming the run reused all ten scores. The rehearsal stayed under the local `../control-rehearsal/` directory. Its short test conversations establish that the run and export work. Official timing and accuracy depend on the organizer's transcripts.
+
 ## Compact scoring experiment
 
 `model/compact-transcripts` changes the prompt version to `cqa-rubric-v4`. It uses compact turn arrays and elapsed seconds for chronologically ordered call timestamps. The UI, evidence turn numbers, transcript fingerprints, and original source times stay available. For calls with timestamps that cannot be parsed in order, the model receives the source times. The candidate also caps explanations and generation length, uses a small repetition penalty, and clarifies consultation, closing, and paid off-company offers.
