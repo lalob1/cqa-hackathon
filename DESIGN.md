@@ -17,7 +17,9 @@ A blue, retro-terminal audit workspace with an interactive green ASCII F at entr
 
 Primary views are Диалоги, Оценка, and Чек-лист. Phone navigation sits at the bottom. Phone review separates Переписка and Оценка; desktop shows transcript and assessment together. Preserve imports, editable criteria, N/A, independent critical flags, evidence jumps, original/final totals, appeals and run history.
 
-Hover effects support the content. The dialogue glass reflects a mouse-local light using one scheduled frame per pointer update; it has no idle frame loop. Decorative layers never receive pointer events. Visible keyboard focus remains available throughout.
+The current navigation uses animated icons with visually hidden labels and native title tooltips. Its one shared bubble glides between the icons. The dialogue browser is a curved carousel of portrait glass papers. Center the ASCII Диалоги title below the arc. Each paper contains the existing ID, preview, language and score; a click opens the corresponding detail page. Wheel, swipe, arrow controls, keyboard arrows/Home/End and bounded dot pagination browse the collection. Preserve the selected paper on return. Do not repeat visible count labels.
+
+Hover effects support the content. Each paper reflects a mouse-local light using one scheduled frame per pointer update; it has no idle frame loop. Decorative layers never receive pointer events. Visible keyboard focus remains available throughout. Paper transforms settle in 650 ms. For large collections, hide papers beyond the three neighbors on each side and show at most seven pagination dots.
 
 ## Constraints
 

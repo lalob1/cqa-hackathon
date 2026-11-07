@@ -35,17 +35,17 @@
       <h1 id="workspace-title" class="ascii-title ascii-title-hero" data-ascii-title="Аудит диалогов" aria-label="Аудит диалогов"><span class="ascii-title-text">Аудит диалогов</span><canvas class="ascii-title-canvas" aria-hidden="true"></canvas></h1>
       <nav class="app-nav" aria-label="Основная навигация">
         <span class="nav-selection" aria-hidden="true"></span>
-        <button type="button" data-view="dialogues" aria-current="false">
+        <button type="button" data-view="dialogues" aria-current="false" title="Диалоги">
           <span class="nav-icon nav-icon-dialogues" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path class="nav-bubble" d="M4 5h16v11H9l-5 4V5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path class="nav-message-lines" d="M8 9h8m-8 3h5" pathLength="100" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>
-          <span>Диалоги</span>
+          <span class="sr-only">Диалоги</span>
         </button>
-        <button type="button" data-view="review" aria-current="false">
+        <button type="button" data-view="review" aria-current="false" title="Оценка">
           <span class="nav-icon nav-icon-review" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M7 4h10v2h3v15H4V6h3V4Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path class="nav-score-check" d="m8 13 3 3 5-6" pathLength="100" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-          <span>Оценка</span>
+          <span class="sr-only">Оценка</span>
         </button>
-        <button type="button" data-view="checklist" id="toggle-rubric" aria-current="false" aria-expanded="false" aria-controls="editor">
+        <button type="button" data-view="checklist" id="toggle-rubric" aria-current="false" aria-expanded="false" aria-controls="editor" title="Чек-лист">
           <span class="nav-icon nav-icon-checklist" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><g stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path class="nav-list-tick" d="m4 6 1.5 1.5L8 4" pathLength="100"/><path class="nav-list-tick" d="m4 13 1.5 1.5L8 11" pathLength="100"/><path class="nav-list-tick" d="m4 20 1.5 1.5L8 18" pathLength="100"/><path class="nav-list-lines" d="M12 6h8m-8 7h8m-8 7h8"/></g></svg></span>
-          <span>Чек-лист</span>
+          <span class="sr-only">Чек-лист</span>
         </button>
       </nav>
     </div>
@@ -61,8 +61,17 @@
       </div>
     </section>
     <section id="dialogues-view" class="library" hidden aria-labelledby="library-title">
-      <header class="view-heading">
-        <h2 id="library-title" class="ascii-title ascii-title-section" data-ascii-title="Диалоги" aria-label="Диалоги"><span class="ascii-title-text">Диалоги</span><canvas class="ascii-title-canvas" aria-hidden="true"></canvas></h2>
+      <header class="view-heading library-toolbar">
+        <label class="search-field">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.7" stroke="currentColor" stroke-width="1.7"/><path d="m16 16 4 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+          <span class="sr-only">Поиск по ID или языку</span>
+          <input type="search" id="filter" placeholder="Поиск по ID или языку">
+        </label>
+        <div class="list-filters" aria-label="Фильтр диалогов">
+          <button type="button" data-list-filter="all" aria-pressed="true">Все</button>
+          <button type="button" data-list-filter="pending" aria-pressed="false">Без оценки</button>
+          <label class="filter-chip"><input type="checkbox" id="critical-only" class="sr-only">Ошибки ИИ</label>
+        </div>
         <div class="actions">
           <label class="button upload primary icon-button" title="Загрузить диалоги">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 16V4m-4 4 4-4 4 4M5 15v5h14v-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -77,19 +86,16 @@
           </details>
         </div>
       </header>
-      <div class="list-tools">
-        <label class="search-field">
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.7" stroke="currentColor" stroke-width="1.7"/><path d="m16 16 4 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
-          <span class="sr-only">Поиск по ID или языку</span>
-          <input type="search" id="filter" placeholder="Поиск по ID или языку">
-        </label>
-        <div class="list-filters" aria-label="Фильтр диалогов">
-          <button type="button" data-list-filter="all" aria-pressed="true">Все</button>
-          <button type="button" data-list-filter="pending" aria-pressed="false">Без оценки</button>
-          <label class="filter-chip"><input type="checkbox" id="critical-only" class="sr-only">Ошибки ИИ</label>
+      <div class="dialogue-carousel">
+        <div id="conversation-list" class="dialogue-deck" role="group" aria-roledescription="карусель" aria-label="Карточки диалогов" aria-description="Листайте колёсиком, свайпом или стрелками клавиатуры. Нажмите на карточку, чтобы открыть диалог."></div>
+        <div class="deck-caption">
+          <button type="button" id="deck-prev" class="deck-arrow" aria-label="Предыдущий диалог"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m14 6-6 6 6 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <h2 id="library-title" class="ascii-title ascii-title-section" data-ascii-title="Диалоги" aria-label="Диалоги"><span class="ascii-title-text">Диалоги</span><canvas class="ascii-title-canvas" aria-hidden="true"></canvas></h2>
+          <button type="button" id="deck-next" class="deck-arrow" aria-label="Следующий диалог"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m10 6 6 6-6 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         </div>
+        <div id="deck-pagination" class="deck-pagination" aria-label="Выбрать диалог"></div>
+        <p id="deck-status" class="sr-only" aria-live="polite" aria-atomic="true"></p>
       </div>
-      <div id="conversation-list" class="list-group"></div>
     </section>
     <section id="review-view" class="review-view" hidden aria-label="Проверка диалога">
       <div class="review-bar">

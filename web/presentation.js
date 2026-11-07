@@ -125,29 +125,174 @@
 
 // A local light reflection follows the pointer; no idle animation or frame loop.
 (() => {
-  const glass = document.querySelector("#conversation-list");
-  if (!glass) return;
+  const deck = document.querySelector("#conversation-list");
+  if (!deck) return;
+  let glass = null;
   let frame = 0, pointerX = 0, pointerY = 0;
   function reset() {
     cancelAnimationFrame(frame);
     frame = 0;
-    glass.classList.remove("is-reflecting");
+    glass?.classList.remove("is-reflecting");
+    glass = null;
   }
-  glass.addEventListener("pointermove", event => {
+  deck.addEventListener("pointermove", event => {
     if (event.pointerType !== "mouse") return;
+    const card = event.target.closest(".paper-record");
+    if (!card) { reset(); return; }
+    if (glass !== card) { reset(); glass = card; }
     pointerX = event.clientX;
     pointerY = event.clientY;
     if (frame) return;
     frame = requestAnimationFrame(() => {
       frame = 0;
       const box = glass.getBoundingClientRect();
-      glass.style.setProperty("--glass-x", (pointerX - box.left) + "px");
-      glass.style.setProperty("--glass-y", (pointerY - box.top) + "px");
+      glass.style.setProperty("--glass-x", (pointerX - box.left) / box.width * 100 + "%");
+      glass.style.setProperty("--glass-y", (pointerY - box.top) / box.height * 100 + "%");
       glass.classList.add("is-reflecting");
     });
   }, {passive: true});
-  glass.addEventListener("pointerleave", reset);
-  glass.addEventListener("pointercancel", reset);
+  deck.addEventListener("pointerleave", reset);
+  deck.addEventListener("pointercancel", reset);
   document.addEventListener("cqa:view-change", reset);
   document.addEventListener("visibilitychange", reset);
+})();
+
+(() => {
+  const deck = document.querySelector(".dialogue-deck");
+  const pager = document.querySelector("#deck-pagination");
+  const previous = document.querySelector("#deck-prev");
+  const next = document.querySelector("#deck-next");
+  if (!deck || !pager) return;
+  let cards = [], current = 0, anchor = null, wheelAt = 0, wheelDelta = 0;
+  let drag = null, suppressClickUntil = 0;
+  const wrap = value => (value % cards.length + cards.length) % cards.length;
+
+  function layout() {
+    const narrow = deck.clientWidth < 600;
+    cards.forEach((card, index) => {
+      let distance = index - current;
+      if (distance > cards.length / 2) distance -= cards.length;
+      if (distance < -cards.length / 2) distance += cards.length;
+      const steps = Math.abs(distance), shown = steps <= 3;
+      const x = Math.sign(distance) * Math.min(steps, 4) * (narrow ? 159 : 224);
+      const y = Math.min(steps, 4) ** 1.55 * (narrow ? 37 : 43);
+      const angle = Math.sign(distance) * Math.min(steps, 4) * (narrow ? 16 : 18);
+      card.style.setProperty("--paper-x", x + "px");
+      card.style.setProperty("--paper-y", y + "px");
+      card.style.setProperty("--paper-angle", angle + "deg");
+      card.style.setProperty("--paper-scale", String(Math.max(.58, 1 - steps * .11)));
+      card.style.zIndex = String(Math.max(1, 10 - steps));
+      card.classList.toggle("is-current", index === current);
+      card.classList.toggle("is-away", !shown);
+      card.tabIndex = index === current ? 0 : -1;
+      card.setAttribute("aria-current", String(index === current));
+      card.setAttribute("aria-hidden", String(!shown));
+    });
+  }
+
+  function paginate() {
+    pager.replaceChildren();
+    const count = Math.min(cards.length, 7);
+    const start = Math.max(0, Math.min(current - 3, cards.length - count));
+    for (let index = start; index < start + count; index++) {
+      const dot = document.createElement("button");
+      dot.type = "button";
+      dot.className = "deck-dot";
+      dot.setAttribute("aria-label", "Диалог " + cards[index].querySelector(".record-title").textContent);
+      dot.setAttribute("aria-current", String(index === current));
+      dot.addEventListener("click", () => move(index, true));
+      pager.append(dot);
+    }
+  }
+
+  function move(index, focus = false) {
+    if (!cards.length) return;
+    current = wrap(index);
+    anchor = cards[current].dataset.recordIndex;
+    layout();
+    paginate();
+    document.querySelector("#deck-status").textContent = cards[current].querySelector(".record-title").textContent
+      + ", " + cards[current].querySelector(".record-meta").textContent;
+    if (focus) cards[current].focus({preventScroll: true});
+  }
+
+  function refresh() {
+    cards = Array.from(deck.querySelectorAll(".paper-record"));
+    const preserved = cards.findIndex(card => card.dataset.recordIndex === anchor);
+    current = preserved < 0 ? 0 : preserved;
+    previous.disabled = next.disabled = cards.length < 2;
+    pager.hidden = cards.length < 2;
+    deck.classList.toggle("is-empty", !cards.length);
+    if (cards.length) move(current);
+    else { pager.replaceChildren(); document.querySelector("#deck-status").textContent = ""; }
+  }
+
+  previous.addEventListener("click", () => move(current - 1));
+  next.addEventListener("click", () => move(current + 1));
+  deck.addEventListener("keydown", event => {
+    const direction = {ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1}[event.key];
+    if (direction || event.key === "Home" || event.key === "End") {
+      event.preventDefault();
+      move(event.key === "Home" ? 0 : event.key === "End" ? cards.length - 1 : current + direction, true);
+    }
+  });
+  deck.addEventListener("wheel", event => {
+    if (event.ctrlKey || cards.length < 2) return;
+    event.preventDefault();
+    const time = performance.now();
+    if (time - wheelAt < 480) return;
+    wheelDelta += Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+    if (Math.abs(wheelDelta) < 30) return;
+    move(current + Math.sign(wheelDelta));
+    wheelDelta = 0;
+    wheelAt = time;
+  }, {passive: false});
+  deck.addEventListener("pointerdown", event => {
+    if (event.button !== 0 || !event.isPrimary) return;
+    drag = {x: event.clientX, y: event.clientY, id: event.pointerId, moved: false};
+  });
+  deck.addEventListener("pointermove", event => {
+    if (!drag || event.pointerId !== drag.id) return;
+    const dx = event.clientX - drag.x, dy = event.clientY - drag.y;
+    if (!drag.moved && Math.abs(dx) > 9 && Math.abs(dx) > Math.abs(dy)) {
+      drag.moved = true;
+      deck.setPointerCapture(event.pointerId);
+      deck.classList.add("is-dragging");
+    }
+    if (drag.moved) {
+      event.preventDefault();
+      deck.style.setProperty("--drag-x", Math.max(-70, Math.min(70, dx * .32)) + "px");
+    }
+  });
+  function release(event) {
+    if (!drag || event.pointerId !== drag.id) return;
+    if (drag.moved) {
+      suppressClickUntil = performance.now() + 350;
+      const dx = event.clientX - drag.x;
+      if (!["pointercancel", "lostpointercapture"].includes(event.type) && Math.abs(dx) > 35)
+        move(current + (dx < 0 ? 1 : -1));
+    }
+    drag = null;
+    deck.classList.remove("is-dragging");
+    deck.style.removeProperty("--drag-x");
+  }
+  deck.addEventListener("pointerup", release);
+  deck.addEventListener("pointercancel", release);
+  // Touch transfers implicit capture from the paper to the deck. Ignore the
+  // paper's bubbling lost-capture event while the deck still owns the gesture.
+  deck.addEventListener("lostpointercapture", event => { if (event.target === deck) release(event); });
+  window.addEventListener("pointerup", release);
+  deck.addEventListener("click", event => {
+    if (performance.now() < suppressClickUntil) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      return;
+    }
+    const card = event.target.closest(".paper-record");
+    if (card) anchor = card.dataset.recordIndex;
+  }, {capture: true});
+  document.addEventListener("cqa:records-change", refresh);
+  document.addEventListener("cqa:view-change", layout);
+  new ResizeObserver(layout).observe(deck);
+  refresh();
 })();

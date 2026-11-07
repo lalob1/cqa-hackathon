@@ -55,3 +55,11 @@ The dialogue list, search and filter chips use translucent blue glass with backd
 ## Blue-glass polish
 
 Consistent control gradients, blue reading surfaces, field focus, row text and edge highlights were visually inspected on desktop and phone. Chrome verified mouse-local reflection and cleanup, non-intercepting decorative layers, empty-search feedback, the import menu, keyboard focus, and phone review tabs. All three views fit 320, 390, 680, 681, 900, 1024 and 1440 px, including an expanded checklist. Shared-indicator/search checks still pass. No browser JavaScript errors or frontend dependencies were added.
+
+## Curved paper carousel and icon-only navigation
+
+The previous grouped layout is saved at `checkpoint/blue-glass-polish-2026-11-08`. Portrait glass papers now follow an arc above the centered ASCII Диалоги heading. Each paper opens its matching transcript/assessment page; returning preserves the selected paper. All three primary navigation captions are visually hidden, with their animated icons, accessible names, tooltips and sliding indicator retained.
+
+Chrome verified wheel browsing, arrow/Home/End navigation, mouse drag with release-click suppression, direct center/side paper opening, return selection, reflection cleanup, language/empty/pending/critical filters, and validated synthetic transcript/result import. The imported 93.75 score remained unchanged on paper and detail; eight criteria and evidence jumps worked. A 78-record synthetic collection reached its final record, with at most seven papers/dots visible and one tabbable paper. All three views and the shared nav indicator fit 320, 390, 680, 681, 900, 1024 and 1440 px. No horizontal overflow or JavaScript errors occurred; no live inference was requested.
+
+Native Chrome touch emulation also changed sample-ru to sample-kz without opening details. The touch implicit-capture transfer was fixed and retested. All three main-nav labels have 1 px clipped boxes while retaining their exact accessible button names. Desktop and phone previews show icon-only navigation.

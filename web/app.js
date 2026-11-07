@@ -187,7 +187,7 @@ function renderList() {
     if (!(conversation.conversation_id + " " + conversation.language).toLowerCase().includes(search)) continue;
     if ($("critical-only").checked && !critical) continue;
     if (listFilter === "pending" && latest) continue;
-    const button = node("button", undefined, "record");
+    const button = node("button", undefined, "record paper-record");
     button.type = "button";
     button.dataset.recordIndex = String(index);
     const copy = node("span", undefined, "record-copy");
@@ -203,12 +203,16 @@ function renderList() {
     } else {
       end.append(node("span", undefined, "record-chevron"));
     }
-    button.append(conversationIcon(conversation.channel), copy, end);
+    const paper = node("span", undefined, "paper-lines");
+    paper.setAttribute("aria-hidden", "true");
+    for (let line = 0; line < 3; line++) paper.append(node("i"));
+    button.append(conversationIcon(conversation.channel), paper, copy, end);
     button.addEventListener("click", () => openRecord(index));
     list.append(button);
   }
   if (!list.childElementCount) list.append(node("p",
     workspace.records.length ? "Нет диалогов по этому фильтру." : "Загрузите диалоги, чтобы начать проверку.", "empty"));
+  document.dispatchEvent(new Event("cqa:records-change"));
 }
 
 function renderTranscript() {
