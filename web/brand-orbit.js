@@ -16,6 +16,12 @@
     fModel = model;
     draw();
   }).catch(() => { /* The vector mark remains available as a loading fallback. */ });
+  let coinModels = null;
+  let opaqueRects = [];
+  fetch("/coin-models.json").then(response => {
+    if (!response.ok) throw new Error("Coin models unavailable");
+    return response.json();
+  }).then(data => { coinModels = data.models; draw(); }).catch(() => {});
   const logo = new Image();
   logo.src = "/f-mark.svg";
   const shield = new Path2D("M16 20h128v39c0 52-20 88-64 113C36 147 16 111 16 59V20Z");
@@ -95,7 +101,7 @@
     ctx.stroke();
   }
 
-  function coin(item, view) {
+  function flatCoin(item, view) {
     const {p, id, angle, orbit} = item;
     // A short light trail follows each actual orbital path.
     for (let j = 16; j > 0; j--) {
@@ -163,6 +169,99 @@
     if (sparkle > .25 && p.z > 0) {
       glow(p.x - size * .35, p.y - size * .7, size, sparkle * .16);
       glint(p.x - size * .35, p.y - size * .7, 3 + sparkle * 4, sparkle * .65, true);
+    }
+  }
+
+  function rotation(x, y, z) {
+    const cy = Math.cos(y), sy = Math.sin(y);
+    const cx = Math.cos(x), sx = Math.sin(x);
+    const cz = Math.cos(z), sz = Math.sin(z);
+    return point => {
+      const a = point[0] * cy + point[2] * sy;
+      const b = point[2] * cy - point[0] * sy;
+      const c = point[1] * cx - b * sx;
+      return [a * cz - c * sz, a * sz + c * cz, point[1] * sx + b * cx];
+    };
+  }
+
+  function coin(item, view) {
+    if (!coinModels) return flatCoin(item, view);
+    const {p, id, angle, orbit} = item;
+    const center = position(orbit, angle);
+    for (let j = 16; j > 0; j--) {
+      const direction = Math.sign(orbit.speed);
+      const a = project(position(orbit, angle - j * .009 * direction), view);
+      const b = project(position(orbit, angle - (j - 1) * .009 * direction), view);
+      ctx.lineWidth = .6 + (1 - j / 16) * 1.1;
+      ctx.strokeStyle = "rgba(119,216,235," + (1 - j / 17) * .25 + ")";
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+    }
+    const radius = clamp(view.radius * .052, 10, 25);
+    const screenRadius = radius * p.perspective;
+    const margin = screenRadius * 1.6 + 24;
+    if (p.x + screenRadius < 0 || p.x - screenRadius > width ||
+        p.y + screenRadius < 0 || p.y - screenRadius > height) return;
+    // Opaque app cards fully cover these coins, so their mesh need not be painted.
+    if (opaqueRects.some(rect => p.x - margin > rect.left && p.x + margin < rect.right &&
+      p.y - margin > rect.top && p.y + margin < rect.bottom)) return;
+    const model = coinModels[id % coinModels.length];
+    const turn = elapsed * .55 + id * 1.17 + yaw * .5;
+    const spin = rotation(.24 + Math.sin(elapsed * .37 + id) * .24 + pitch * .4,
+      turn, Math.sin(elapsed * .19 + id) * .18);
+    const camera = normalized([-center[0], center[1], 7 - center[2]]);
+    const light = normalized([-.7, .85, 1.5]);
+    const halfway = normalized(light.map((v, i) => v + camera[i]));
+    const dot = (a, b) => a.reduce((sum, value, i) => sum + value * b[i], 0);
+    const visiblePart = dot(spin([0, 0, 1]), camera) > 0 ? 1 : 2;
+    const scale = radius / view.radius;
+    const faces = [];
+    for (const face of model.surfaces) {
+      if (face.part && face.part !== visiblePart) continue;
+      const normal = spin(face.normal);
+      if (dot(normal, camera) < .002) continue;
+      const vertices = face.vertices.map(spin);
+      const points = vertices.map(vertex => {
+        const point = project([center[0] + vertex[0] * scale,
+          center[1] - vertex[1] * scale, center[2] + vertex[2] * scale], view);
+        return [point.x, point.y];
+      });
+      faces.push({points, normal, material: face.material, part: face.part,
+        depth: vertices.reduce((sum, vertex) => sum + vertex[2], 0) / vertices.length});
+    }
+    faces.sort((a, b) => Number(Boolean(a.part)) - Number(Boolean(b.part)) || a.depth - b.depth);
+    const tint = (color, brightness, specular) =>
+      "rgb(" + color.map(value => Math.round(clamp(value * brightness + specular, 0, 255))).join(",") + ")";
+    ctx.save();
+    ctx.globalAlpha = p.z > 0 ? .90 : .50;
+    for (const face of faces) {
+      const material = model.materials[face.material];
+      const illumination = .30 + Math.max(0, dot(face.normal, light)) * .80;
+      const shine = Math.pow(Math.max(0, dot(face.normal, halfway)), 28) * 145;
+      const points = face.points;
+      ctx.beginPath();
+      points.forEach((point, index) => index ? ctx.lineTo(...point) : ctx.moveTo(...point));
+      ctx.closePath();
+      if (points.length > 10) {
+        const gradient = ctx.createLinearGradient(p.x - screenRadius, p.y - screenRadius,
+          p.x + screenRadius, p.y + screenRadius);
+        gradient.addColorStop(0, tint(material.color, illumination * 1.12, shine));
+        gradient.addColorStop(.48, tint(material.color, illumination * .9, shine * .7));
+        gradient.addColorStop(1, tint(material.color, illumination, shine * .25));
+        ctx.fillStyle = gradient;
+      } else ctx.fillStyle = tint(material.color, illumination, shine);
+      ctx.fill();
+      ctx.strokeStyle = tint(material.color, illumination, shine);
+      ctx.lineWidth = .30;
+      ctx.stroke();
+    }
+    ctx.restore();
+    const sparkle = Math.pow(.5 + .5 * Math.sin(elapsed * 1.3 + id * 2.1), 14);
+    if (sparkle > .25 && p.z > 0) {
+      glow(p.x - screenRadius * .35, p.y - screenRadius * .7, screenRadius, sparkle * .16);
+      glint(p.x - screenRadius * .35, p.y - screenRadius * .7, 3 + sparkle * 4, sparkle * .65, true);
     }
   }
 
@@ -289,6 +388,9 @@
   function draw() {
     ctx.clearRect(0, 0, width, height);
     const view = scene();
+    opaqueRects = Array.from(document.querySelectorAll(".panel, .list-group"))
+      .filter(element => element.getClientRects().length)
+      .map(element => element.getBoundingClientRect());
     const coins = [];
     let id = 0;
     for (const orbit of orbits) {

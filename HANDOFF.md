@@ -77,6 +77,10 @@ The user approved this layout before requesting the F-and-coins experiment. The 
 
 The user approved the 3D F before requesting true 3D coins. This state is preserved on `checkpoint/3d-f-2026-11-08`. The F is a 334-triangle, 20,068-byte GLB with a thick shield, beveled edges and a raised letter. `web/f-model.json` supplies the same geometry to the native projected-mesh renderer; `tools/build_f_model.py` rebuilds both exports from `web/f-mark.svg`. The browser applies perspective, back-face culling, depth sorting, surface normals and lighting. It permits full background drag rotation and retains gentle automatic float and turn. A Chrome check verified 118 surfaces, 0.225 model-depth span, changing projected caps, drag, keyboard pulse, five viewport widths and zero JavaScript errors. A three-second local sample measured about 5% script time on one core. The GLB header, six materials and unit normals were independently checked.
 
+## True 3D coin checkpoint
+
+Before the user requested hiding their paths, the approved 3D coins are saved on `checkpoint/3d-coins-with-orbits-2026-11-08`. `tools/build_coin_models.py` builds three beveled, reeded cylinder meshes with raised symbols on both faces: tenge (500 triangles, 29,960-byte GLB), dollar (1,012 triangles, 53,232-byte GLB), and euro (908 triangles, 48,764-byte GLB). The native renderer loads `web/coin-models.json`; the reusable exports are `web/coin-tenge.glb`, `web/coin-dollar.glb`, and `web/coin-euro.glb`. The F model bytes remain identical to its approved checkpoint. A Chrome check verified both symbol faces, depth spans of 0.386–0.392, continuous painted mesh surfaces, drag and keyboard pulse, five viewport widths, and zero JavaScript errors. The local three-second sample painted 68 scene frames and reported about 8% script time on one core; this is not a low-end-device benchmark. Fully covered coin meshes are skipped behind opaque app cards.
+
 ## Verification and limits
 
 - Run `python -m unittest discover -s tests -v` and `node --check web/app.js`. Both passed with thirteen automated tests. The API and browser accepted all 65 DEV records.
