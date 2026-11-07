@@ -14,6 +14,7 @@ const roleArtwork = {
 const answerText = (value) => ({yes: "Да", no: "Нет", na: "N/A"})[value] ?? String(value);
 const scoreText = (value) => value === null ? "—" : value.toFixed(2);
 let defaults, workspace, selected, historyIndex, busy = false;
+let listFilter = "all", statusTimer;
 const pendingReviews = new WeakSet();
 
 function node(tag, text, className) {
@@ -35,8 +36,10 @@ function speakerBadge(speaker) {
 }
 
 function status(message, isError = false) {
+  clearTimeout(statusTimer);
   $("status").textContent = message;
   $("status").dataset.error = String(isError);
+  if (!isError && !busy) statusTimer = setTimeout(() => { $("status").textContent = ""; }, 7000);
 }
 
 async function api(path, body) {
@@ -56,6 +59,34 @@ function persist(message) {
   } catch {
     status(message + " Хранилище браузера недоступно или заполнено. Данные есть в текущей вкладке.", true);
   }
+}
+
+function setReviewTab(tab) {
+  document.body.dataset.reviewTab = tab;
+  for (const button of document.querySelectorAll(".review-tabs [data-review-tab]")) {
+    button.setAttribute("aria-pressed", String(button.dataset.reviewTab === tab));
+  }
+}
+
+function showView(view, tab) {
+  $("dialogues-view").hidden = view !== "dialogues";
+  $("review-view").hidden = view !== "review";
+  $("editor").hidden = view !== "checklist";
+  document.body.dataset.view = view;
+  for (const button of document.querySelectorAll(".app-nav [data-view]")) {
+    button.setAttribute("aria-current", button.dataset.view === view ? "page" : "false");
+  }
+  $("toggle-rubric").setAttribute("aria-expanded", String(view === "checklist"));
+  document.querySelector(".import-menu").open = false;
+  if (tab) setReviewTab(tab);
+  if (view === "dialogues" && workspace) renderList();
+  window.scrollTo({top: 0, behavior: "instant"});
+}
+
+function openRecord(index) {
+  selectRecord(index);
+  showView("review", "dialogue");
+  $("transcript-title").focus({preventScroll: true});
 }
 
 function selectRecord(index) {
@@ -82,7 +113,9 @@ async function importPayload(payload, label) {
   workspace.records.push(...additions);
   $("filter").value = "";
   $("critical-only").checked = false;
+  listFilter = "all";
   selectRecord(first);
+  showView("dialogues");
   persist(label + " · новых диалогов " + additions.length);
 }
 
@@ -108,7 +141,9 @@ async function importResults(payload) {
   }
   $("filter").value = "";
   $("critical-only").checked = false;
+  listFilter = "all";
   selectRecord(indexes.get(checked.results[0].conversation_id));
+  showView("review", "score");
   persist("Добавлено оценок: " + added + " · ошибок в пакете: " + checked.failed);
 }
 
@@ -124,6 +159,19 @@ function handleUpload(id, importFile) {
   });
 }
 
+function conversationIcon(channel) {
+  const icon = node("span", undefined, "record-icon");
+  icon.setAttribute("aria-hidden", "true");
+  const svg = document.createElementNS(svgNamespace, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("fill", "none");
+  svg.innerHTML = channel === "voice call"
+    ? '<path d="m8 4 3 4-2.5 2.5a12 12 0 0 0 5 5L16 13l4 3-1 4C11 21 3 13 4 5l4-1Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>'
+    : '<path d="M4 5h16v11H9l-5 4V5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 9h8m-8 3h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>';
+  icon.append(svg);
+  return icon;
+}
+
 function renderList() {
   const list = $("conversation-list");
   const search = $("filter").value.toLowerCase().trim();
@@ -131,25 +179,43 @@ function renderList() {
   let criticalCount = 0;
   list.replaceChildren();
   $("record-count").textContent = workspace.records.length;
+  for (const button of document.querySelectorAll("[data-list-filter]")) {
+    button.setAttribute("aria-pressed", String(button.dataset.listFilter === listFilter));
+  }
   for (const [index, conversation] of workspace.records.entries()) {
-    const latest = workspace.runs[index]?.at(-1)?.original;
+    const run = workspace.runs[index]?.at(-1);
+    const latest = run?.original;
     const critical = Object.values(latest?.score.flags ?? {}).some(Boolean);
     if (latest) scoredCount += 1;
     if (critical) criticalCount += 1;
     if (!(conversation.conversation_id + " " + conversation.language).toLowerCase().includes(search)) continue;
     if ($("critical-only").checked && !critical) continue;
-    const button = node("button", conversation.conversation_id, "record");
+    if (listFilter === "pending" && latest) continue;
+    const button = node("button", undefined, "record");
     button.type = "button";
-    button.setAttribute("aria-current", String(index === selected));
+    button.dataset.recordIndex = String(index);
     const channel = conversation.channel === "voice call" ? "Звонок" : "Чат";
-    button.append(node("small", conversation.language + " · " + channel));
-    if (latest) button.append(node("span", critical ? "Грубая ошибка" : "Оценён", critical ? "record-state attention" : "record-state"));
-    button.addEventListener("click", () => selectRecord(index));
+    const copy = node("span", undefined, "record-copy");
+    const preview = conversation.transcript.find(turn => turn.speaker === "client")?.text
+      ?? conversation.transcript[0]?.text ?? "";
+    copy.append(node("span", conversation.conversation_id, "record-title"),
+      node("span", preview, "record-preview"),
+      node("span", conversation.language + " · " + channel + " · " + conversation.transcript.length + " репл.", "record-meta"));
+    const end = node("span", undefined, "record-end" + (critical ? " attention" : ""));
+    if (latest) {
+      end.append(node("span", scoreText((run.finalScore || latest.score).total), "record-score"),
+        node("span", critical ? "Ошибка ИИ" : "Оценён", "record-state" + (critical ? " attention" : "")));
+    } else {
+      end.append(node("span", undefined, "record-chevron"));
+    }
+    button.append(conversationIcon(conversation.channel), copy, end);
+    button.addEventListener("click", () => openRecord(index));
     list.append(button);
   }
   $("workspace-scored").textContent = scoredCount;
   $("workspace-critical").textContent = criticalCount;
-  if (!list.childElementCount) list.append(node("p", "Диалоги не найдены.", "empty"));
+  if (!list.childElementCount) list.append(node("p",
+    workspace.records.length ? "Нет диалогов по этому фильтру." : "Загрузите диалоги, чтобы начать проверку.", "empty"));
 }
 
 function renderTranscript() {
@@ -181,6 +247,7 @@ function renderTranscript() {
 }
 
 function showEvidence(span) {
+  showView("review", "dialogue");
   const rail = $("turn-rail").children;
   for (const [index, turn] of Array.from($("turns").children).entries()) {
     const marked = index + 1 >= span.start && index + 1 <= span.end;
@@ -295,7 +362,8 @@ function renderCriterion(run, item, finalScore, opened) {
   const points = finalScore.criteria[item.id];
   const weight = item.type === "flag" ? "Отдельный флаг" :
     "Вес " + item.weight + " · начислено " + scoreText(points.points) + " из " + scoreText(points.effective_weight);
-  row.append(node("p", weight, "meta"), node("p", "Исходная оценка: " + answerText(original.answer)), node("p", "Обоснование модели: " + original.reason));
+  row.append(node("p", weight, "meta"), node("p", original.reason));
+  if (appeal?.decision) row.append(node("p", "Исходная оценка ИИ: " + answerText(original.answer), "meta"));
   for (const span of original.evidence) {
     const link = node("a", "#" + span.start + (span.end === span.start ? "" : "–" + span.end), "evidence");
     link.href = "#message-" + span.start;
@@ -306,7 +374,11 @@ function renderCriterion(run, item, finalScore, opened) {
   if (appeal?.decision) {
     row.append(node("p", "Решение: " + answerText(current) + " · " + appeal.decision.reason));
   } else {
-    row.append(reviewForm(run, item, appeal, current));
+    const panel = node("details", undefined, "appeal-panel");
+    panel.open = Boolean(appeal);
+    panel.append(node("summary", appeal ? "Рассмотреть апелляцию" : "Оспорить оценку"),
+      reviewForm(run, item, appeal, current));
+    row.append(panel);
   }
   return row;
 }
@@ -330,7 +402,7 @@ function renderResult(openCriterion, reveal = false) {
   pane.replaceChildren();
   if (!run) {
     const empty = node("div", undefined, "empty-result");
-    empty.append(node("p", "Оценка ещё не запущена", "empty-title"), node("p", "После запуска здесь появятся баллы и ссылки на реплики.", "empty"));
+    empty.append(node("p", "Оцените диалог по текущему чек-листу."));
     pane.append(empty);
     return;
   }
@@ -354,12 +426,15 @@ function renderResult(openCriterion, reveal = false) {
   }
   const flags = Object.entries(final.flags).filter(([, value]) => value).map(([id]) => original.rubric.find((item) => item.id === id).title);
   if (flags.length) pane.append(node("p", flags.join(" · "), "flag"));
+  for (const item of original.rubric) pane.append(renderCriterion(run, item, final, openCriterion === item.id));
+  const info = node("details", undefined, "run-info");
+  info.append(node("summary", "О запуске"));
   const sections = node("ul", undefined, "section-list");
   for (const [name, row] of Object.entries(final.sections)) sections.append(node("li", name + " · " + scoreText(row.points) + " / " + scoreText(row.max)));
-  if (sections.childElementCount) pane.append(sections);
+  if (sections.childElementCount) info.append(sections);
   const source = run.source === "batch" ? "Импорт из CLI" : "Запуск в приложении";
-  pane.append(node("p", source + " · " + original.audit.model + " · чек-лист " + original.audit.rubric_sha256.slice(0, 8) + " · вход " + original.audit.input_sha256.slice(0, 8), "meta"));
-  for (const item of original.rubric) pane.append(renderCriterion(run, item, final, openCriterion === item.id));
+  info.append(node("p", source + " · " + original.audit.model + " · чек-лист " + original.audit.rubric_sha256.slice(0, 8) + " · вход " + original.audit.input_sha256.slice(0, 8), "meta"));
+  pane.append(info);
 }
 
 function answersFor(item) {
@@ -450,17 +525,38 @@ async function boot() {
   selectRecord(0);
   if (!workspace.records.length) await importPayload(await api("/synthetic.json"), "Синтетические примеры загружены");
   $("filter").addEventListener("input", renderList);
-  $("critical-only").addEventListener("change", renderList);
+  $("critical-only").addEventListener("change", () => {
+    listFilter = $("critical-only").checked ? "critical" : "all";
+    renderList();
+  });
+  for (const button of document.querySelectorAll("[data-list-filter]")) {
+    button.addEventListener("click", () => {
+      listFilter = button.dataset.listFilter;
+      $("critical-only").checked = false;
+      renderList();
+    });
+  }
+  for (const button of document.querySelectorAll(".app-nav [data-view]")) {
+    button.addEventListener("click", () => showView(button.dataset.view,
+      button.dataset.view === "review" ? "score" : undefined));
+  }
+  for (const button of document.querySelectorAll(".review-tabs [data-review-tab]")) {
+    button.addEventListener("click", () => setReviewTab(button.dataset.reviewTab));
+  }
+  $("back-to-list").addEventListener("click", () => {
+    showView("dialogues");
+    document.querySelector('[data-record-index="' + selected + '"]')?.focus({preventScroll: true});
+  });
+  document.addEventListener("click", event => {
+    const menu = document.querySelector(".import-menu");
+    if (!menu.contains(event.target)) menu.open = false;
+  });
   $("history").addEventListener("change", () => { historyIndex = Number($("history").value); renderResult(); });
   handleUpload("upload", (payload) => importPayload(payload, "Данные загружены"));
   handleUpload("upload-results", importResults);
   $("demo").addEventListener("click", async () => {
     try { await importPayload(await api("/synthetic.json"), "Синтетические примеры загружены"); }
     catch (error) { status(error.message, true); }
-  });
-  $("toggle-rubric").addEventListener("click", () => {
-    $("editor").hidden = !$("editor").hidden;
-    $("toggle-rubric").setAttribute("aria-expanded", String(!$("editor").hidden));
   });
   $("add").addEventListener("click", () => addEditor({type: "binary", weight: 5}, true));
   $("reset-rubric").addEventListener("click", () => {

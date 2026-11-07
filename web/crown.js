@@ -22,7 +22,7 @@
   ];
   const parents = [0, 0, 0, 1, 1, 2, 2];
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
-  let width = 0, height = 0, dpr = 1, bounds;
+  let width = 0, height = 0, dpr = 1;
   let elapsed = 0, previous = 0, paintedAt = -Infinity, request;
   let yaw = 0, pitch = 0, aimX = 0, aimY = 0, tiltX = 0, tiltY = 0;
   let drag = null, wasDragged = false, lastPulse = -2.2, selectedLeaf = 3;
@@ -210,18 +210,12 @@
     const ribbons = [0, 1, 2].map(index => ribbon(index, turnX, turnY));
     const dots = sphere.map(point => rotate(point, turnX, turnY * .73));
     const tree = nodes.map(point => rotate(point, turnX, turnY));
-    // A quiet, oversized echo continues behind the grid and workspace margins.
-    drawView({x: width * .62, y: height * .62, radius: Math.max(width * .44, height * .52),
-      alpha: .15, focus: false}, ribbons, dots, tree);
-    if (bounds.bottom > 0 && bounds.top < height) {
-      drawView({x: bounds.left + bounds.width * .5, y: bounds.top + bounds.height * .50,
-        radius: Math.min(bounds.width * .38, bounds.height * .40), alpha: .96, focus: true},
-      ribbons, dots, tree);
-    }
+    drawView(sceneView(), ribbons, dots, tree);
   }
 
-  function measure() {
-    bounds = stage.getBoundingClientRect();
+  function sceneView() {
+    return {x: width * .76, y: height * .82,
+      radius: Math.min(width * .52, height * .70), alpha: .46, focus: true};
   }
 
   function resize() {
@@ -231,13 +225,11 @@
     canvas.width = Math.ceil(width * dpr);
     canvas.height = Math.ceil(height * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    measure();
     draw();
   }
 
   function pulse(x, y) {
-    const view = {x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2,
-      radius: Math.min(bounds.width * .38, bounds.height * .40)};
+    const view = sceneView();
     if (Number.isFinite(x) && Number.isFinite(y)) {
       const projected = nodes.map(point => project(rotate(point, -.28 + pitch + tiltY,
         elapsed * .095 + yaw + tiltX), view));
@@ -262,12 +254,17 @@
     drag.x = event.clientX;
     drag.y = event.clientY;
   }, {passive: true});
-  stage.addEventListener("pointerdown", event => {
+  function beginDrag(event) {
     if (event.button !== 0) return;
     drag = {id: event.pointerId, x: event.clientX, y: event.clientY,
       startX: event.clientX, startY: event.clientY};
     wasDragged = false;
     stage.setPointerCapture(event.pointerId);
+  }
+  stage.addEventListener("pointerdown", beginDrag);
+  window.addEventListener("pointerdown", event => {
+    if (event.target.closest("button, a, input, textarea, select, label, summary, .workspace, .editor, .library, nav")) return;
+    beginDrag(event);
   });
   function release(event) {
     if (drag?.id !== event.pointerId) return;
@@ -287,8 +284,6 @@
   });
   window.addEventListener("blur", () => { drag = null; aimX = 0; aimY = 0; });
   window.addEventListener("resize", resize);
-  window.addEventListener("scroll", measure, {passive: true});
-  new ResizeObserver(measure).observe(stage);
 
   function animate(now) {
     const delta = previous ? Math.min(now - previous, 100) / 1000 : 0;
@@ -315,4 +310,3 @@
   document.addEventListener("visibilitychange", syncVisibility);
   syncVisibility();
 })();
-
