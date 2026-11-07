@@ -71,3 +71,54 @@
 
   for (const line of document.querySelectorAll("[data-verse]")) preparePrint(line);
 })();
+
+(() => {
+  const nav = document.querySelector(".app-nav");
+  const bubble = nav?.querySelector(".nav-selection");
+  if (!bubble) return;
+  let motion = null, ready = false, destination = "";
+
+  function place(animate) {
+    const button = nav.querySelector('button[aria-current="page"]');
+    if (!button || !button.offsetWidth || !nav.getClientRects().length) {
+      motion?.cancel();
+      motion = null;
+      ready = false;
+      destination = "";
+      bubble.classList.remove("is-ready");
+      return;
+    }
+    const transform = "translate(" + button.offsetLeft + "px," + button.offsetTop + "px)";
+    const width = button.offsetWidth + "px";
+    const height = button.offsetHeight + "px";
+    const target = {transform, width, height};
+    const key = [transform, width, height].join("|");
+    if (ready && key === destination && animate) return;
+
+    // Read the in-flight position before cancelling, so fast taps retarget smoothly.
+    const computed = getComputedStyle(bubble);
+    const from = {transform: computed.transform, width: computed.width, height: computed.height};
+    motion?.cancel();
+    motion = null;
+    Object.assign(bubble.style, target);
+    bubble.style.borderRadius = getComputedStyle(button).borderRadius;
+    nav.classList.add("has-nav-selection");
+    bubble.classList.add("is-ready");
+    if (ready && animate) {
+      const current = bubble.animate([from, target], {
+        duration: 420,
+        easing: "cubic-bezier(.22,1,.36,1)"
+      });
+      motion = current;
+      current.addEventListener("finish", () => { if (motion === current) motion = null; }, {once: true});
+    }
+    ready = true;
+    destination = key;
+  }
+
+  document.addEventListener("cqa:view-change", () => place(true));
+  window.addEventListener("resize", () => place(false));
+  new ResizeObserver(() => place(false)).observe(nav);
+  document.fonts.ready.then(() => place(false));
+  place(false);
+})();

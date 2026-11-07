@@ -45,3 +45,9 @@ The final entry dissolve is 1,250 ms, followed by a 540 ms workspace reveal. It 
 Аудит диалогов and Диалоги now render in larger, brighter blue ASCII lettering with glow, a moving highlight and stable letter shapes. The main title wraps into two lines on narrow screens. Accessible heading names and a readable text fallback remain.
 
 A targeted Chrome check verified animated blue pixels in both headings, one accessible heading for each title, no title rendering on startup, same-row upload alignment, and no horizontal overflow at 320, 390, 681, 768, 1024 and 1440 px. No JavaScript errors occurred. Pixel readback during QA generated two Chrome performance advisories; normal rendering does not perform those repeated title-canvas readbacks.
+
+## Shared navigation bubble and liquid glass
+
+A single persistent indicator glides between all three primary tabs in 420 ms. Chrome verified intermediate travel, element identity, rapid-click continuity, keyboard selection, programmatic selection after opening a row, and settled alignment at 320, 390, 680, 681, 768, 1024 and 1440 px.
+
+The dialogue list, search and filter chips use translucent blue glass with backdrop blur, bright rims and subtle reflections. The list computed blur(20px) saturate(1.35) and translucent gradient stops at alpha 0.64/0.72. Coin rendering no longer treats the glass list as opaque. Language search worked; no horizontal overflow or JavaScript errors occurred.

@@ -32,7 +32,7 @@ DEV retrieval was verified from the signed organizer endpoint. It returned **65 
 | [engine.py](engine.py) | Validate imports and rubrics, call the model with the current checklist and numbered turns, validate each answer and evidence range, calculate the final score, and add provenance. Both adapters are local. |
 | [app.py](app.py) | Standard-library loopback HTTP server. `GET /api/config`, `POST /api/import`, `/api/import-results`, `/api/rubric`, `/api/score` and `/api/recalculate`. |
 | [web/index.html](web/index.html), [web/app.js](web/app.js), [web/style.css](web/style.css) | Browser workspace with import, filters, transcript and audio link, rubric editing and export, criterion scores, evidence links, per-dialogue run history, and appeal review. |
-| [web/presentation.js](web/presentation.js) | Native word reveal on load and hover, separate from scoring and review. |
+| [web/presentation.js](web/presentation.js) | Native word reveal and one persistent animated navigation-selection bubble, separate from scoring and review. |
 | [web/brand-orbit.js](web/brand-orbit.js) | The approved 3D F and eleven true 3D currency coins behind the app. Orbit guides and trails are invisible. Drag and keyboard pulse remain. Pauses during the welcome screen and while hidden. |
 | [web/f-mark.svg](web/f-mark.svg), [web/f-model.json](web/f-model.json), [web/f-model.glb](web/f-model.glb) | Vector source and 334-triangle extruded, beveled F shield. The JSON and GLB carry matching geometry. |
 | [web/coin-models.json](web/coin-models.json) | Meshes for tenge, dollar and euro coins: thickness, beveled/reeded rims, and raised symbols on both faces. Individual GLB exports are alongside this file. |
@@ -120,6 +120,14 @@ The user requested more visible, hero-style treatment for **Аудит диал�
 The shared renderer in `web/ascii-titles.js` uses one 24 fps loop, caps DPR at 1.5 and pauses when headings are hidden or the tab is hidden. It keeps stable letter silhouettes while characters shuffle and a light sweep moves through them. Pointer movement adds local illumination. Accessible heading names and plain-text fallbacks are retained. The main title no longer uses the earlier word-print wrapper; the quality heading still does.
 
 Chrome verified both headings had visible bright-blue pixels, changing animation output, exactly one accessible heading for each name, no rendering behind startup, and same-row upload alignment at 320, 390, 681, 768, 1024 and 1440 px. No horizontal overflow or JavaScript errors occurred. The two console advisories came from the QA pixel-readback probes.
+
+## Sliding navigation and dialogue glass
+
+The selected navigation background is one persistent `.nav-selection` element beneath the three primary buttons. It travels and resizes between **Диалоги**, **Оценка**, and **Чек-лист** over 420 ms with an ease-out curve. Rapid taps begin from the bubble's current interpolated position. View changes, including opening a dialogue from the list, update the same indicator. Resize and font readiness snap its geometry to the active button so it stays aligned when navigation moves to the bottom on phones. The indicator is decorative; button labels, focus and aria-current remain intact. Hover does not create a competing second bubble.
+
+The dialogue list, search field and filter chips now have blue liquid-glass styling: translucent gradient surfaces, frosted backdrop blur, luminous edge highlights and restrained inset reflections. The list uses a 20 px blur and 135% saturation. CSS provides opaque fallbacks where backdrop filters are unavailable. The transparent dialogue list is excluded from opaque-card coin culling, so the moving F and coins remain visible through its glass.
+
+Chrome observed the same bubble element at intermediate positions on all three routes, verified rapid retargeting and keyboard activation, checked programmatic navigation from a dialogue row, and confirmed final alignment at 320, 390, 680, 681, 768, 1024 and 1440 px. The two breakpoint sides were included because navigation moves from the header to the bottom bar. Search still filtered by language. There were no JavaScript errors or horizontal overflows. Desktop, mobile and checklist/review previews were refreshed.
 
 ## Verification and limits
 
