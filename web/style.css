@@ -44,13 +44,12 @@ button svg, .button svg, summary svg { width: 21px; height: 21px; flex: none; }
 .actions { display: flex; align-items: center; flex-wrap: wrap; gap: .55rem; }
 .upload { position: relative; }
 .upload input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: inherit; }
-.crown-field, .crown-stage { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; }
-.crown-field { pointer-events: none; }
-.crown-stage { display: block; padding: 0; border: 0; border-radius: 0; background: transparent; cursor: grab; touch-action: pan-y; user-select: none; }
-.crown-stage:hover, .crown-stage:active { background: transparent; transform: none; }
-.crown-stage:active { cursor: grabbing; }
-.crown-stage:focus-visible { outline: 1px solid #7fceff; outline-offset: -6px; }
-.crown-formula { position: absolute; right: max(1.2rem, env(safe-area-inset-right)); bottom: 1rem; color: #96c3ed70; font: .65rem ui-monospace, Consolas, monospace; letter-spacing: .04em; pointer-events: none; }
+.orbit-field, .orbit-stage { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; }
+.orbit-field { pointer-events: none; }
+.orbit-stage { display: block; padding: 0; border: 0; border-radius: 0; background: transparent; cursor: grab; touch-action: pan-y; user-select: none; }
+.orbit-stage:hover, .orbit-stage:active { background: transparent; transform: none; }
+.orbit-stage:active { cursor: grabbing; }
+.orbit-stage:focus-visible { outline: 1px solid #7fceff; outline-offset: -6px; }
 .masthead, main { position: relative; z-index: 1; }
 .masthead-inner, main { max-width: 1240px; margin-inline: auto; padding-inline: clamp(1rem, 4vw, 2.5rem); }
 .masthead { border-bottom: 1px solid #42628535; }
@@ -271,7 +270,6 @@ textarea { min-height: 5rem; resize: vertical; line-height: 1.55; }
   .app-nav button { display: flex; flex: 1; flex-direction: column; gap: .4rem; min-height: 56px; padding: .45rem; border-radius: 15px; font-size: .68rem; color: #9eb5d1; }
   .app-nav button svg { display: block; width: 22px; height: 22px; }
   .app-nav button[aria-current="page"] { background: transparent; color: #9edcff; }
-  .crown-formula { bottom: calc(88px + env(safe-area-inset-bottom)); font-size: .56rem; }
   .view-heading { gap: .8rem; margin-bottom: 1rem; }
   .library .view-heading { align-items: flex-start; }
   .library .view-heading > .actions { gap: .4rem; }

@@ -21,3 +21,9 @@ The user approved a simpler app inspired by the supplied Freedom mobile screensh
 A three-second Chrome sample measured script execution at about 15% of one core's time for the crown version on this machine. It is capped at 30 fps and DPR 1.5, and pauses while hidden. This is a local observation, not a low-end-device benchmark.
 
 Organizer Ground Truth and the ten official control chats are still unavailable. These checks establish working UI flows, not competition accuracy. Phone checks used Chrome viewport emulation.
+
+## Current F-and-coins experiment
+
+The approved application layout is retained. The crown and equation are replaced with a transparent vector F shield and eleven metallic coins on three inclined orbits. The F has its own float, turn, breathing scale and clipped light sweep. The background stays at z-index 0 and the app at 1. Dragging rotates the orbits; click/Enter produces a wave and a temporary speed increase.
+
+A further Chrome check captured 90 changing F transforms in three seconds, verified keyboard pulse drawing and continuous autoplay, and repeated all three views at the five widths above. No JavaScript errors occurred. A local three-second script-time sample was approximately 5% of one core; no new runtime library was added. The six-second motion GIF is a browser capture for review.
