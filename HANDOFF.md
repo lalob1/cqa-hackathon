@@ -40,6 +40,10 @@ DEV retrieval was verified from the signed organizer endpoint. It returned **65 
 | [tests/test_cqa.py](tests/test_cqa.py) | Thirteen checks covering rubric math, evidence, resume and lock behavior, expected input counts, checkpoint import validation, and organizer export. |
 | [HANDOFF.md](HANDOFF.md) | This record of decisions, status, verification, and next work. |
 
+## Interactive crown checkpoint
+
+Before the requested app simplification, the crown version is preserved on `checkpoint/crown-layout-2026-11-08`. It adds `web/crown.js`: native projected ribbon geometry, a binary sphere, tree nodes, drag rotation, pointer parallax, and click/keyboard root pulses. Its initial placement is in the hero plus an oversized background echo. The user requested moving it into the lowest background layer during the next redesign. Canvas rendering is capped at 30 fps and DPR 1.5 and pauses in hidden tabs. The equation and root updates are illustrative graphics, separate from dialogue scoring. A Chrome smoke check exercised dragging, keyboard activation and the eight-criterion editor without a JavaScript error.
+
 ## Design sketch and decisions
 
 ```text

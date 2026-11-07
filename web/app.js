@@ -328,9 +328,6 @@ function renderResult(openCriterion, reveal = false) {
   }
   const pane = $("results");
   pane.replaceChildren();
-  const visualScore = run ? (run.finalScore || run.original.score).total : null;
-  $("visual-score").textContent = scoreText(visualScore);
-  $("visual-score-fill").setAttribute("stroke-dasharray", (visualScore ?? 0) + " 100");
   if (!run) {
     const empty = node("div", undefined, "empty-result");
     empty.append(node("p", "Оценка ещё не запущена", "empty-title"), node("p", "После запуска здесь появятся баллы и ссылки на реплики.", "empty"));

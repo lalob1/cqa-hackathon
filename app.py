@@ -14,6 +14,7 @@ FILES = {
     "/": (WEB / "index.html", "text/html; charset=utf-8"),
     "/app.js": (WEB / "app.js", "text/javascript; charset=utf-8"),
     "/presentation.js": (WEB / "presentation.js", "text/javascript; charset=utf-8"),
+    "/crown.js": (WEB / "crown.js", "text/javascript; charset=utf-8"),
     "/style.css": (WEB / "style.css", "text/css; charset=utf-8"),
     "/synthetic.json": (ROOT / "examples" / "synthetic.json", "application/json"),
 }
