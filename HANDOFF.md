@@ -103,7 +103,7 @@ Local six-chat DEV diagnostic used two seeded selections per language. The provi
 
 The 115-turn call was used to measure a compact prompt prototype on the local tokenizer. Input content fell from **9,713 to 4,824 tokens** in that measurement while retaining all 115 turns. To continue the DEV comparison locally, use `../dev-review-six.json`, `../dev-review-six-labels.json`, `../dev-review-six-notes.md`, `../dev-review-v3-cuda.json`, and `../dev-review-v3-cuda-metrics.json`. The verified Windows CUDA runtime is under `../runtime-cuda-b11719/`. This material stays local.
 
-Control validation requires the organizer's 10 transcripts and the scoring reference when released. The commands are in [README.md](README.md#контрольный-запуск). Before the code freeze, run the full control batch, check all ten rows and the empty error list, rehearse the five-minute flow with the replacement criterion, and record the commit and model revision. Public submission requires the organizer's submission channel and the team's decision to publish.
+Control scoring requires the organizer's 10 transcripts or the assigned control group. The organizer holds the Ground Truth for judging. The commands are in [README.md](README.md#контрольный-запуск). Before the code freeze, run the full control batch, verify the ten original IDs and an empty error list, rehearse the five-minute flow with the replacement criterion, and record the commit and model revision. Public submission requires the organizer's submission channel and the team's decision to publish.
 
 ## Compact scoring experiment
 

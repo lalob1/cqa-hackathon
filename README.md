@@ -46,12 +46,18 @@ python batch.py export data/dev.json runs/dev.json --group dev --team-name "Demo
 
 ### Контрольный запуск
 
-Подставьте выданный организатором `group_id` и используйте отдельно сохранённый файл ссылки, если организатор выдал новый адрес.
+Подставьте выданный организатором `group_id` и используйте отдельно сохранённый файл ссылки, если организатор выдал новый адрес. Выполните блок из корня репозитория в терминале с настройками запущенной модели. Если организатор прислал готовый JSON, сохраните его как `data/control.json` и начните с команды `score`.
 
 ```powershell
+if (-not $env:CQA_CONTROL_GROUP -or -not $env:CQA_MODEL_REVISION) {
+    throw "Set CQA_CONTROL_GROUP and CQA_MODEL_REVISION before scoring."
+}
 python batch.py fetch --url-file data/control-url.txt --group $env:CQA_CONTROL_GROUP --output data/control.json
+if ($LASTEXITCODE -ne 0) { throw "Control fetch failed." }
 python batch.py score data/control.json --expect-count 10 --model-revision $env:CQA_MODEL_REVISION --resume --output runs/control.json
+if ($LASTEXITCODE -ne 0) { throw "Control scoring failed. Check runs/control.json and retry with --resume." }
 python batch.py export data/control.json runs/control.json --group prod --team-name "Democrats"
+if ($LASTEXITCODE -ne 0) { throw "Control export failed." }
 ```
 
 Установите `CQA_CONTROL_GROUP` и `CQA_MODEL_REVISION` в текущем терминале. Для локальных весов используйте SHA-256 модели. Программа проверит количество до первого вызова модели. При повторном запуске с `--resume` она сверит хеши набора и чек-листа, версию промпта и параметры модели. Затем она повторит только ошибки и оставшиеся диалоги. После экспорта проверьте `results/prod/results.json`. В нём должно быть ровно 10 исходных ID. Если обработка отдельного чата завершилась ошибкой, его запись имеет статус `error` и причину, как требует формат организатора. Для официальной выгрузки используется исходный чек-лист из восьми критериев.
