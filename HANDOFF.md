@@ -131,6 +131,8 @@ Chrome observed the same bubble element at intermediate positions on all three r
 
 ## Verification and limits
 
+The blue-glass polish adds consistent gradients/rims to navigation, primary and secondary controls, reading panels and checklist fields. Pointer-local list reflection is throttled to one scheduled frame and resets on leave/view change; it does not create an idle render loop. Chrome verified reflection cleanup, empty search, the import menu, keyboard field focus, phone review tabs and all three views at seven widths (320–1440 px), without overflow or JavaScript errors. The previous shared-bubble checks also passed. [DESIGN.md](DESIGN.md) records the visual system. [ANSPHARE_SKILLS.md](ANSPHARE_SKILLS.md) records the requested downloads and sign-in requirement; these files have not yet been installed.
+
 - Run `python -m unittest discover -s tests -v` and `node --check web/app.js`. Both passed with thirteen automated tests. The API and browser accepted all 65 DEV records.
 - The original Chrome smoke test used Qwen3-4B Q4_K_M through llama.cpp Vulkan build 11719. A fresh synthetic RU chat returned all eight judgments in about 38 seconds. The evidence link highlighted the referenced turn. A test appeal preserved the 100.00 original and changed the final to 92.31. The rubric editor saved an added criterion, and both scores survived reload. See the later V4 run below for full DEV scoring and long-call performance. Ollama itself was untested in this environment.
 - The baseline marked consultation N/A even though the customer asked an explicit tariff question in turn 1. It cited the closing turn. Evidence bounds and valid JSON allowed the result. See the paired calibration below.

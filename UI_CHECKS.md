@@ -51,3 +51,7 @@ A targeted Chrome check verified animated blue pixels in both headings, one acce
 A single persistent indicator glides between all three primary tabs in 420 ms. Chrome verified intermediate travel, element identity, rapid-click continuity, keyboard selection, programmatic selection after opening a row, and settled alignment at 320, 390, 680, 681, 768, 1024 and 1440 px.
 
 The dialogue list, search and filter chips use translucent blue glass with backdrop blur, bright rims and subtle reflections. The list computed blur(20px) saturate(1.35) and translucent gradient stops at alpha 0.64/0.72. Coin rendering no longer treats the glass list as opaque. Language search worked; no horizontal overflow or JavaScript errors occurred.
+
+## Blue-glass polish
+
+Consistent control gradients, blue reading surfaces, field focus, row text and edge highlights were visually inspected on desktop and phone. Chrome verified mouse-local reflection and cleanup, non-intercepting decorative layers, empty-search feedback, the import menu, keyboard focus, and phone review tabs. All three views fit 320, 390, 680, 681, 900, 1024 and 1440 px, including an expanded checklist. Shared-indicator/search checks still pass. No browser JavaScript errors or frontend dependencies were added.

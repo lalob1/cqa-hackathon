@@ -122,3 +122,32 @@
   document.fonts.ready.then(() => place(false));
   place(false);
 })();
+
+// A local light reflection follows the pointer; no idle animation or frame loop.
+(() => {
+  const glass = document.querySelector("#conversation-list");
+  if (!glass) return;
+  let frame = 0, pointerX = 0, pointerY = 0;
+  function reset() {
+    cancelAnimationFrame(frame);
+    frame = 0;
+    glass.classList.remove("is-reflecting");
+  }
+  glass.addEventListener("pointermove", event => {
+    if (event.pointerType !== "mouse") return;
+    pointerX = event.clientX;
+    pointerY = event.clientY;
+    if (frame) return;
+    frame = requestAnimationFrame(() => {
+      frame = 0;
+      const box = glass.getBoundingClientRect();
+      glass.style.setProperty("--glass-x", (pointerX - box.left) + "px");
+      glass.style.setProperty("--glass-y", (pointerY - box.top) + "px");
+      glass.classList.add("is-reflecting");
+    });
+  }, {passive: true});
+  glass.addEventListener("pointerleave", reset);
+  glass.addEventListener("pointercancel", reset);
+  document.addEventListener("cqa:view-change", reset);
+  document.addEventListener("visibilitychange", reset);
+})();
