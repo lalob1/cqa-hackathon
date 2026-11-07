@@ -167,6 +167,8 @@ The existing GGUF file is at `../model/qwen3-4b-q4_k_m.gguf` from the checkout (
 
 The latest local preview is at `http://127.0.0.1:18770/` on the original machine. It uses the Qwen runner at port 18880 with context 12288, one slot, Vulkan offload and Q8_0 KV cache. Both were left running for review. The official DEV export was generated from `../dev-full-v4.json`. The control run needs the actual 10 transcripts or the assigned control group.
 
+On 8 November, the running model timed out during a synthetic check. Restarting the idle service with the same weights and settings restored a valid eight-criterion result for `sample-ru` in **53.48 s**, including all evidence bounds. This check used a warm model and was slower than the earlier rehearsal. Use the documented control timeout and watch the per-dialogue checkpoint when the real set arrives. The timing summary is local in `../release-scorer-smoke.json`.
+
 ### Resume commands
 
 ```powershell
