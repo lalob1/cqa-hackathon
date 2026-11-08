@@ -3,58 +3,138 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>CQA / Аудит диалогов</title>
+  <meta name="theme-color" content="#081327">
+  <title>Democrats / Аудит диалогов</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/style.css">
   <script src="/app.js" defer></script>
+  <script src="/presentation.js" defer></script>
+  <script src="/brand-orbit.js" defer></script>
+  <script src="/welcome.js" defer></script>
+  <script src="/brand-ascii.js" defer></script>
+  <script src="/ascii-titles.js" defer></script>
 </head>
-<body>
+<body data-view="start" data-review-tab="dialogue">
+  <canvas class="orbit-field" aria-hidden="true"></canvas>
+  <button class="orbit-stage" id="orbit-stage" type="button"
+    aria-label="Фоновая анимация: потяните для вращения, нажмите для импульса.">
+  </button>
   <header class="masthead">
-    <div class="brand"><span class="monogram" aria-hidden="true">CQ</span><div>Conversation Quality Analytics<small>Рабочая станция контроля качества</small></div></div>
-    <div class="model"><span class="dot"></span><span id="model">Локальная модель</span></div>
+    <div class="masthead-inner">
+      <a class="brand ascii-brand" href="/" aria-label="Democrats, главная">
+        <canvas id="brand-ascii" aria-hidden="true"></canvas>
+        <span class="sr-only">Democrats</span>
+      </a>
+      <div class="masthead-context">
+        <span class="model" aria-label="Настроенная модель"><span class="dot"></span><span id="model">Локальная модель</span></span>
+      </div>
+    </div>
   </header>
   <main>
-    <section class="overview" aria-labelledby="workspace-title">
-      <div><p class="eyebrow">DATA CHALLENGE / CQA</p><h1 id="workspace-title">Аудит диалогов</h1><p>Оцените оператора, проверьте доказательства и сохраните решение.</p></div>
-      <div class="actions">
-        <label class="button secondary upload">Загрузить диалоги <input type="file" id="upload" accept=".json,application/json"></label>
-        <label class="button secondary upload">Импорт оценок <input type="file" id="upload-results" accept=".json,application/json"></label>
-        <button class="secondary" id="demo" type="button">Примеры</button>
-        <button class="secondary" id="toggle-rubric" type="button" aria-expanded="false" aria-controls="editor">Чек-лист</button>
+    <div class="page-heading">
+      <h1 id="workspace-title" class="ascii-title ascii-title-hero" data-ascii-title="Аудит диалогов" aria-label="Аудит диалогов"><span class="ascii-title-text">Аудит диалогов</span><canvas class="ascii-title-canvas" aria-hidden="true"></canvas></h1>
+      <nav class="app-nav" aria-label="Основная навигация">
+        <span class="nav-selection" aria-hidden="true"></span>
+        <button type="button" data-view="dialogues" aria-current="false" title="Диалоги">
+          <span class="nav-icon nav-icon-dialogues" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path class="nav-bubble" d="M4 5h16v11H9l-5 4V5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path class="nav-message-lines" d="M8 9h8m-8 3h5" pathLength="100" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>
+          <span class="sr-only">Диалоги</span>
+        </button>
+        <button type="button" data-view="review" aria-current="false" title="Оценка">
+          <span class="nav-icon nav-icon-review" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M7 4h10v2h3v15H4V6h3V4Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path class="nav-score-check" d="m8 13 3 3 5-6" pathLength="100" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          <span class="sr-only">Оценка</span>
+        </button>
+        <button type="button" data-view="checklist" id="toggle-rubric" aria-current="false" aria-expanded="false" aria-controls="editor" title="Чек-лист">
+          <span class="nav-icon nav-icon-checklist" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><g stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path class="nav-list-tick" d="m4 6 1.5 1.5L8 4" pathLength="100"/><path class="nav-list-tick" d="m4 13 1.5 1.5L8 11" pathLength="100"/><path class="nav-list-tick" d="m4 20 1.5 1.5L8 18" pathLength="100"/><path class="nav-list-lines" d="M12 6h8m-8 7h8m-8 7h8"/></g></svg></span>
+          <span class="sr-only">Чек-лист</span>
+        </button>
+      </nav>
+    </div>
+    <p id="status" role="status" aria-live="polite"></p>
+    <section id="start-view" aria-labelledby="workspace-title">
+      <button id="ascii-stage" class="ascii-stage" type="button" aria-label="Вращайте ASCII-логотип F. Нажмите для светового импульса.">
+        <canvas id="ascii-canvas" aria-hidden="true"></canvas>
+      </button>
+      <div class="start-actions">
+        <button type="button" id="enter-workspace" class="primary start-button" aria-label="Открыть диалоги" title="Открыть диалоги" disabled>
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 12h15m-6-6 6 6-6 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
       </div>
     </section>
-    <p id="status" role="status" aria-live="polite"></p>
-    <section id="editor" class="panel editor" hidden aria-labelledby="rubric-title">
-      <header><p class="eyebrow">ПРАВИЛА ОЦЕНКИ</p><h2 id="rubric-title">Чек-лист</h2><p>Изменения применяются к новым запускам. В истории хранится версия правил каждого запуска.</p></header>
-      <form id="rubric-form">
-        <div id="criteria-editor"></div>
-        <div class="actions">
-          <button class="secondary" id="add" type="button">Добавить критерий</button>
-          <button class="secondary" id="reset-rubric" type="button">Вернуть исходный</button>
-          <button class="secondary" id="export-rubric" type="button">Скачать чек-лист</button>
-          <button type="submit">Сохранить чек-лист</button>
+    <section id="dialogues-view" class="library" hidden aria-labelledby="library-title">
+      <header class="view-heading library-toolbar">
+        <label class="search-field">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.7" stroke="currentColor" stroke-width="1.7"/><path d="m16 16 4 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+          <span class="sr-only">Поиск по ID или языку</span>
+          <input type="search" id="filter" placeholder="Поиск по ID или языку">
+        </label>
+        <div class="list-filters" aria-label="Фильтр диалогов">
+          <button type="button" data-list-filter="all" aria-pressed="true">Все</button>
+          <button type="button" data-list-filter="pending" aria-pressed="false">Без оценки</button>
+          <label class="filter-chip"><input type="checkbox" id="critical-only" class="sr-only">Ошибки ИИ</label>
         </div>
+        <div class="actions">
+          <label class="button upload primary icon-button" title="Загрузить диалоги">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 16V4m-4 4 4-4 4 4M5 15v5h14v-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <input type="file" id="upload" accept=".json,application/json" aria-label="Загрузить диалоги">
+          </label>
+          <details class="import-menu">
+            <summary aria-label="Другие действия"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></summary>
+            <div class="menu-content">
+              <label class="button upload secondary">Импорт оценок<input type="file" id="upload-results" accept=".json,application/json"></label>
+              <button class="secondary" id="demo" type="button">Открыть примеры</button>
+            </div>
+          </details>
+        </div>
+      </header>
+      <div class="dialogue-carousel">
+        <div id="conversation-list" class="dialogue-deck" role="group" aria-roledescription="карусель" aria-label="Карточки диалогов" aria-description="Листайте колёсиком, свайпом или стрелками клавиатуры. Нажмите на карточку, чтобы открыть диалог."></div>
+        <div class="deck-caption">
+          <button type="button" id="deck-prev" class="deck-arrow" aria-label="Предыдущий диалог"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m14 6-6 6 6 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <h2 id="library-title" class="ascii-title ascii-title-section" data-ascii-title="Диалоги" aria-label="Диалоги"><span class="ascii-title-text">Диалоги</span><canvas class="ascii-title-canvas" aria-hidden="true"></canvas></h2>
+          <button type="button" id="deck-next" class="deck-arrow" aria-label="Следующий диалог"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m10 6 6 6-6 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        </div>
+        <div id="deck-pagination" class="deck-pagination" aria-label="Выбрать диалог"></div>
+        <p id="deck-status" class="sr-only" aria-live="polite" aria-atomic="true"></p>
+      </div>
+    </section>
+    <section id="review-view" class="review-view" hidden aria-label="Проверка диалога">
+      <div class="review-bar">
+        <button type="button" id="back-to-list" class="back-button"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m13 5-7 7 7 7M6 12h14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>Диалоги</button>
+        <div class="review-tabs" aria-label="Раздел диалога">
+          <button type="button" data-review-tab="dialogue" aria-pressed="true">Переписка</button>
+          <button type="button" data-review-tab="score" aria-pressed="false">Оценка</button>
+        </div>
+      </div>
+      <div class="workspace">
+        <section class="panel transcript" aria-labelledby="transcript-title">
+          <header class="chat-heading">
+            <span class="role-icon role-operator" aria-hidden="true"><svg viewBox="0 0 28 28" fill="none"><path d="M6.7 15v-1.9a7.3 7.3 0 0 1 14.6 0v1.9M21 18v1a3 3 0 0 1-3 3h-3" stroke="currentColor" stroke-width="1.65" stroke-linecap="round"/><g class="glyph-cups" fill="currentColor"><rect x="5.5" y="13.5" width="4.5" height="6.5" rx="1.8"/><rect x="18" y="13.5" width="4.5" height="6.5" rx="1.8"/></g></svg></span>
+            <div class="chat-heading-copy"><h2 id="transcript-title" tabindex="-1">Выберите диалог</h2><div class="transcript-tools"><p id="conversation-meta"></p><a class="audio-link" id="audio" target="_blank" rel="noopener noreferrer" hidden>Запись звонка ↗</a></div></div>
+          </header>
+          <div class="turn-overview" id="turn-overview" hidden>
+            <div class="turn-overview-head"><span class="sr-only">Ход диалога</span><span class="turn-legend"><i class="client-dot"></i>Клиент <i class="operator-dot"></i>Оператор</span></div>
+            <div class="turn-rail" id="turn-rail" aria-hidden="true"></div>
+          </div>
+          <ol id="turns"></ol>
+          <p class="evidence-note" id="evidence-note" role="status" hidden></p>
+        </section>
+        <section class="panel result" aria-labelledby="score-title">
+          <header class="quality-heading">
+            <span class="role-icon quality-icon" aria-hidden="true"><svg viewBox="0 0 28 28" fill="none"><rect x="6" y="5.5" width="16" height="17" rx="3" stroke="currentColor" stroke-width="1.55"/><path d="M10 5.5V4h8v1.5M10 11h8" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" opacity=".72"/><path class="quality-check" d="m10 16 2.8 2.8 5.2-5.4" pathLength="100" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            <h2 id="score-title" data-verse>Оценка качества</h2>
+          </header>
+          <div class="actions scoring-actions"><button type="button" id="score" class="primary" disabled>Оценить диалог</button><label id="history-label" hidden>История <select id="history"></select></label></div>
+          <div id="results"></div>
+        </section>
+      </div>
+    </section>
+    <section id="editor" class="editor" hidden aria-labelledby="rubric-title">
+      <header class="view-heading"><h2 id="rubric-title">Чек-лист</h2><button type="button" id="export-rubric" class="secondary">Скачать</button></header>
+      <form id="rubric-form">
+        <div id="criteria-editor" class="list-group"></div>
+        <div class="editor-actions actions"><button type="submit" class="primary">Сохранить</button><button class="secondary" id="add" type="button">Добавить критерий</button><button class="text-button" id="reset-rubric" type="button">Сбросить</button></div>
       </form>
     </section>
-    <div class="workspace">
-      <aside class="panel library" aria-labelledby="library-title">
-        <p class="eyebrow">01 / ВЫБОР</p><h2 id="library-title">Диалоги <span class="count" id="record-count">0</span></h2>
-        <label for="filter">Поиск по ID или языку</label>
-        <input type="search" id="filter" placeholder="Например, KZ">
-        <div id="conversation-list"></div>
-      </aside>
-      <section class="panel transcript" aria-labelledby="transcript-title">
-        <header><p class="eyebrow">02 / ТРАНСКРИПТ</p><h2 id="transcript-title">Выберите диалог</h2><p id="conversation-meta"></p><a id="audio" target="_blank" rel="noopener noreferrer" hidden>Открыть запись звонка ↗</a></header>
-        <ol id="turns"></ol>
-      </section>
-      <section class="panel result" aria-labelledby="score-title">
-        <header><p class="eyebrow">03 / ОЦЕНКА</p><h2 id="score-title">Результат</h2></header>
-        <div class="actions">
-          <button type="button" id="score" disabled>Оценить диалог</button>
-          <label id="history-label" hidden>Запуск <select id="history"></select></label>
-        </div>
-        <div id="results"><p class="empty">После запуска здесь появятся баллы и ссылки на реплики.</p></div>
-      </section>
-    </div>
   </main>
 </body>
 </html>

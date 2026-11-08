@@ -8,8 +8,8 @@ from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from batch import compare, reserve_checkpoint, run_batch, write_json
-from engine import (DEFAULT_RUBRIC, ModelError, calculate, extract_records, local_json_post, read_json,
+from batch import compare, reserve_checkpoint, run_batch, submission_payload, write_json
+from engine import (DEFAULT_RUBRIC, ModelError, calculate, extract_records, fingerprint, local_json_post, model_transcript, numbered_turns, read_json,
                     score_conversation, validate_batch_results, validate_rubric)
 
 SAMPLE = read_json("examples/synthetic.json")
@@ -75,7 +75,7 @@ class ChecklistTests(unittest.TestCase):
         self.assertEqual(result["audit"]["attempts"], 2)
         self.assertEqual(result["audit"]["prompt_tokens"], 200)
         self.assertNotEqual(newer["audit"]["input_sha256"], result["audit"]["input_sha256"])
-        self.assertNotEqual(calls[0]["messages"][0]["text"], calls[-1]["messages"][0]["text"])
+        self.assertNotEqual(calls[0]["messages"][0][3], calls[-1]["messages"][0][3])
         self.assertEqual(result["score"]["total"], 77.69)
         self.assertIs(type(result["judgments"]["consultation"]["answer"]), int)
         labels = {**ANSWERS, "closing": "yes", "needs": "yes", "consultation": "na"}
@@ -152,6 +152,51 @@ class ChecklistTests(unittest.TestCase):
         invalid["results"][0]["judgments"]["greeting"]["evidence"][0]["end"] = 99
         with self.assertRaisesRegex(ValueError, "пределы"):
             validate_batch_results(invalid, [sample])
+
+    def test_compact_call_keeps_turns_and_original_source_times(self):
+        turns = numbered_turns({"transcript": [
+            {"timestamp": "2026-11-07T12:00:00Z", "speaker": "client", "text": "Question"},
+            {"timestamp": "2026-11-07T17:00:07.500+05:00", "speaker": "operator", "text": "Answer"},
+        ]})
+        kind, rows = model_transcript(turns, "voice call")
+        self.assertEqual(kind, "elapsed seconds since turn 1")
+        self.assertEqual(rows, [[1, 0, "client", "Question"], [2, 7.5, "operator", "Answer"]])
+        self.assertEqual(turns[0]["timestamp"], "2026-11-07T12:00:00Z")
+        kind, rows = model_transcript(list(reversed(turns)), "voice call")
+        self.assertEqual(kind, "source timestamps")
+        self.assertEqual(rows[0][1], "2026-11-07T17:00:07.500+05:00")
+
+    def test_official_export_preserves_ids_types_and_error_rows(self):
+        example = extract_records(SAMPLE)[0]
+        answers = {**ANSWERS, "closing": "yes", "critical": "no"}
+        judgments = {key: {"answer": str(value), "reason": "Проверено.", "evidence": [{"start": 1, "end": 2}, {"start": 2, "end": 3}]}
+                     for key, value in answers.items()}
+        template = score_conversation(example, DEFAULT_RUBRIC, lambda *_: {"message": {"content": json.dumps(judgments)}})
+        records = [{**example, "conversation_id": f"synthetic-{n:02d}"} for n in range(10)]
+        checkpoint = {
+            "run": {"dataset_sha256": fingerprint(records), "record_count": 10, "rubric_sha256": fingerprint(DEFAULT_RUBRIC),
+                    "provider": template["audit"]["provider"], "model": template["audit"]["model"], "prompt": template["audit"]["prompt"]},
+            "results": [{**template, "conversation_id": record["conversation_id"]} for record in records[:-1]],
+            "errors": [{"conversation_id": records[-1]["conversation_id"], "error": "Model unavailable."}],
+        }
+        exported = submission_payload(records, checkpoint, "Example Team", "prod")
+        self.assertEqual(set(exported), {"schema_version", "team_name", "model", "results"})
+        self.assertEqual(exported["schema_version"], "1.0")
+        self.assertEqual([row["conversation_id"] for row in exported["results"]], [r["conversation_id"] for r in records])
+        first = exported["results"][0]
+        self.assertEqual([row["criterion_id"] for row in first["criteria"]],
+                         ["contact", "discovery", "identification", "consultation", "empathy", "dialogue", "closure", "critical"])
+        self.assertEqual([row["value"] for row in first["criteria"]], [True, None, None, 15, True, 7, True, False])
+        self.assertIs(first["criteria"][0]["value"], True)
+        self.assertIs(type(first["criteria"][3]["value"]), int)
+        self.assertEqual(first["criteria"][0]["evidence_turns"], [1, 2, 3])
+        self.assertEqual(first["score"], {"final_score": 85.38, "critical_flag": False})
+        self.assertEqual(exported["results"][-1], {"conversation_id": records[-1]["conversation_id"], "status": "error",
+                                                   "criteria": [], "score": None, "error": "Model unavailable."})
+        with self.assertRaisesRegex(ValueError, "every input ID"):
+            submission_payload(records, {**checkpoint, "errors": []}, "Example Team", "prod")
+        with self.assertRaisesRegex(ValueError, "60 chats and 5 calls"):
+            submission_payload(records, checkpoint, "Example Team", "dev")
 
 
 if __name__ == "__main__":
