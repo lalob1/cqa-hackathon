@@ -123,9 +123,9 @@ class EngineReliabilityTests(unittest.TestCase):
         result = engine.score_conversation(CONVERSATION, rubric, chat)
         self.assertEqual(result['judgments']['kept'], kept)
         self.assertEqual(result['audit']['repair_criteria'], ['custom'])
-        self.assertEqual(result['audit']['settings']['repair_strategy'], 'invalid_criteria_with_previous_json')
+        self.assertEqual(result['audit']['settings']['repair_strategy'], 'invalid_criteria_only')
 
-    def test_repair_receives_previous_final_json_but_not_private_reasoning(self):
+    def test_repair_receives_operator_indices_but_not_private_reasoning(self):
         bad = copy.deepcopy(JUDGMENTS)
         bad['custom']['evidence'][0]['end'] = 99
         calls = []
@@ -137,8 +137,6 @@ class EngineReliabilityTests(unittest.TestCase):
             return reply
 
         result = engine.score_conversation(CONVERSATION, RUBRIC, chat)
-        self.assertEqual([row['role'] for row in calls[1]], ['system', 'user', 'assistant', 'user'])
-        self.assertEqual(json.loads(calls[1][-2]['content']), bad)
         self.assertIn('Eligible operator turns: [4]', calls[1][-1]['content'])
         self.assertNotIn('Private intermediate thought.', json.dumps(calls[1]))
         self.assertNotIn('Private intermediate thought.', json.dumps(result))
