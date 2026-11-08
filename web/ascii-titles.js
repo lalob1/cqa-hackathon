@@ -58,6 +58,7 @@
     const ctx = title.context;
     ctx.clearRect(0, 0, title.width, title.height);
     const scale = title.scale;
+    const left = title.centered ? (title.width - title.sourceWidth * scale) / 2 : 2;
     const top = (title.height - title.sourceHeight * scale) / 2 - 2;
     const tick = Math.floor(elapsed * 5);
     const entrance = Math.min(1, Math.max(0, (elapsed - title.enteredAt) / .65));
@@ -68,13 +69,14 @@
     ctx.textBaseline = "middle";
     for (const point of title.points) {
       const sweep = Math.pow(.5 + .5 * Math.cos(point.x / title.sourceWidth * 5.5 - elapsed * 1.1), 12);
-      const pointerLight = hover ? Math.max(0, 1 - Math.abs(4 + point.x * scale - title.pointerX) / 100) : 0;
+      const x = left + point.x * scale;
+      const pointerLight = hover ? Math.max(0, 1 - Math.abs(x - title.pointerX) / 100) : 0;
       const tone = Math.min(4, 1 + Math.round(sweep * 2 + pointerLight));
       const reveal = Math.min(1, Math.max(0, entrance * 2.2 - point.x / title.sourceWidth * .65));
       ctx.globalAlpha = reveal;
       ctx.fillStyle = palette[tone];
       ctx.fillText(glyphs[(point.seed * 5 + tick * (point.seed % 2 + 1)) % glyphs.length],
-        2 + point.x * scale, top + point.y * scale);
+        x, top + point.y * scale);
     }
     ctx.globalAlpha = 1;
   }
@@ -83,7 +85,7 @@
     const canvas = element.querySelector(".ascii-title-canvas");
     const context = canvas?.getContext("2d");
     if (!context) continue;
-    const title = {element, canvas, context, label: element.dataset.asciiTitle,
+    const title = {element, canvas, context, label: element.dataset.asciiTitle, centered: element.classList.contains("ascii-title-hero"),
       width: 0, height: 0,
       points: [], scale: 1, visible: false, enteredAt: 0, hoverUntil: -1, pointerX: 0};
     titles.push(title);
