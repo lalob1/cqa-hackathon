@@ -2,6 +2,8 @@
 
 ## Current integration: durable review workflow (2026-11-08)
 
+Start with [REVIEW.md](REVIEW.md) for the model-free demonstration, five-minute walkthrough, and control-run commands. The reviewer fixtures are synthetic conversations with previously recorded Qwen3-4B V4 results. The current branch uses V12 and preserves validated findings for partial assessments. The official DEV result file was reproduced exactly from the original 65 records and saved V4 checkpoint. The organizer has not released the 10 control chats. The repository remains private until the team authorizes publication.
+
 Use branch [`fix/dev-review-workflow`](https://github.com/lalob1/cqa-hackathon/tree/fix/dev-review-workflow). It includes the current team carousel through `d53c114`, merged with the supplied backend-only implementation and fixes. Earlier sections below describe previous checkpoints and should be read in that context.
 
 - Runs, original model judgments, rubric/transcript snapshots, appeals and append-only reviewer decisions are persisted in SQLite. The frontend uses the API for imports and reviews, restores server history and supports original/final critical, pending and open-appeal filters. Latest means last server insertion, selected before filtering.

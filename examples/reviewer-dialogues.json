@@ -1,0 +1,132 @@
+{
+  "isSuccess": true,
+  "error": "",
+  "data": {
+    "dataset_group_id": "SYNTHETIC_REVIEW",
+    "total_records": 4,
+    "records": [
+      {
+        "conversation_id": "rehearsal-01",
+        "language": "RU",
+        "channel": "agent chat",
+        "audio_url": null,
+        "transcript": [
+          {
+            "timestamp": "00:00",
+            "speaker": "client",
+            "text": "Здравствуйте! Где посмотреть тарифы?"
+          },
+          {
+            "timestamp": "00:07",
+            "speaker": "operator",
+            "text": "Здравствуйте! Меня зовут Алия. Откройте раздел «Тарифы» в меню приложения."
+          },
+          {
+            "timestamp": "00:14",
+            "speaker": "client",
+            "text": "Спасибо, нашёл."
+          },
+          {
+            "timestamp": "00:21",
+            "speaker": "operator",
+            "text": "Рада помочь. Если появятся вопросы, напишите нам. До свидания!"
+          }
+        ]
+      },
+      {
+        "conversation_id": "rehearsal-02",
+        "language": "KZ",
+        "channel": "agent chat",
+        "audio_url": null,
+        "transcript": [
+          {
+            "timestamp": "00:00",
+            "speaker": "client",
+            "text": "Сәлеметсіз бе! Қосымшаға кіре алмай жатырмын."
+          },
+          {
+            "timestamp": "00:07",
+            "speaker": "operator",
+            "text": "Сәлеметсіз бе! Менің атым Аян. Қосымша қандай қате көрсетіп тұр?"
+          },
+          {
+            "timestamp": "00:14",
+            "speaker": "client",
+            "text": "Құпиясөз қате дейді."
+          },
+          {
+            "timestamp": "00:21",
+            "speaker": "operator",
+            "text": "Кіру экранында «Құпиясөзді ұмыттыңыз ба?» батырмасын басып, нұсқауларды орындаңыз."
+          },
+          {
+            "timestamp": "00:28",
+            "speaker": "system",
+            "text": "Клиентпен байланыс үзілді."
+          }
+        ]
+      },
+      {
+        "conversation_id": "rehearsal-03",
+        "language": "EN",
+        "channel": "agent chat",
+        "audio_url": null,
+        "transcript": [
+          {
+            "timestamp": "00:00",
+            "speaker": "client",
+            "text": "Can you tell me my account balance?"
+          },
+          {
+            "timestamp": "00:07",
+            "speaker": "operator",
+            "text": "Hello! I'm Dana. Your balance is 200 credits."
+          },
+          {
+            "timestamp": "00:14",
+            "speaker": "client",
+            "text": "How did you verify my identity?"
+          },
+          {
+            "timestamp": "00:21",
+            "speaker": "operator",
+            "text": "I did not verify it. Goodbye."
+          },
+          {
+            "timestamp": "00:28",
+            "speaker": "system",
+            "text": "Chat closed by operator."
+          }
+        ]
+      },
+      {
+        "language": "EN",
+        "channel": "agent chat",
+        "audio_url": null,
+        "transcript": [
+          {
+            "speaker": "client",
+            "timestamp": "00:00",
+            "text": "Good afternoon. Can someone explain where the app shows its fee schedule?"
+          },
+          {
+            "speaker": "operator",
+            "timestamp": "00:08",
+            "text": "This is Ray. Pay me personally after work for a private investment consultation."
+          },
+          {
+            "speaker": "client",
+            "timestamp": "00:16",
+            "text": "No. I only want the public schedule."
+          },
+          {
+            "speaker": "operator",
+            "timestamp": "00:24",
+            "text": "Look in Settings, under Fees."
+          }
+        ],
+        "conversation_id": "rehearsal-10"
+      }
+    ]
+  }
+}

@@ -85,3 +85,9 @@ Native Chrome touch emulation also changed sample-ru to sample-kz without openin
 All 92 Python tests passed. Chrome checked the three views from 320 to 1440 px, reviewed desktop and phone layouts, and verified the normal preview entry after the backend restart. Synthetic workflow checks covered reimporting an older run, all five filters, evidence navigation, an appeal and saved decision, a 409 revision conflict with draft retention, errors-only import, legacy migration and backup, reload, and continued access to cached results when history returned HTTP 503. Original AI flags remained intact after the reviewer cleared a final flag.
 
 A simulated 502 kept the existing score intact and re-enabled retry. A fresh synthetic Qwen run exceeded the five-minute browser observation window. Live model completion was not established in that check.
+
+## Reviewer package
+
+All 97 tests and all browser script syntax checks passed on the sidebar and V12 integration. The four synthetic reviewer records imported through the normal SQLite workflow. The UI showed the N/A rule and the cited transcript turn, saved an appeal and a review decision from 93.75 to 81.25, preserved the original, and restored the decision after reload. The critical filter found the seeded flagged case, and the checklist editor saved an updated rule. Chrome passed all three views at 320, 390, 768, 900, 901 and 1440 px and closed the phone drawer on Escape. No JavaScript errors or horizontal overflow occurred. The exporter rejected the synthetic fixtures as official data.
+
+The DEV file matches a new export from the original source and the saved V4 predictions exactly. It contains all 65 dialogue IDs, 520 judgments and no error rows. The 10 PROD chats have not been released.
