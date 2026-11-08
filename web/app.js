@@ -14,7 +14,63 @@ const answerText = (value) => ({yes: "Да", no: "Нет", na: "N/A"})[value] ??
 const scoreText = (value) => value === null ? "—" : value.toFixed(2);
 let defaults, workspace, selected, historyIndex, busy = false;
 let listFilter = "all", statusTimer;
-const pendingReviews = new WeakSet();
+const pendingReviews = new Set();
+let savedLatest = new Map();
+
+async function allSummaries(latest = true) {
+  const rows = [];
+  for (let offset = 0; ; offset += 500) {
+    const page = await api(`/api/runs?latest=${latest}&limit=500&offset=${offset}`);
+    rows.push(...page.results);
+    if (rows.length >= page.total) return rows;
+  }
+}
+
+async function refreshSavedList() {
+  savedLatest = new Map((await allSummaries()).map(row => [row.conversation_id, row]));
+  renderList();
+}
+
+function replaceRun(run) {
+  let index = workspace.records.findIndex(c => c.conversation_id === run.conversation.conversation_id);
+  if (index < 0) { index = workspace.records.length; workspace.records.push(run.conversation); }
+  if (JSON.stringify(workspace.records[index].transcript) !== JSON.stringify(run.conversation.transcript)) {
+    throw new Error("Сохранённый запуск содержит другой транскрипт для этого ID.");
+  }
+  const runs = workspace.runs[index] ??= [];
+  const prior = runs.findIndex(entry => entry.run_id === run.run_id);
+  if (prior >= 0) runs[prior] = run; else runs.push(run);
+  return index;
+}
+
+async function restoreServerHistory() {
+  const summaries = await allSummaries(false);
+  const loaded = [];
+  for (const row of summaries.reverse()) loaded.push(await api('/api/runs/' + row.run_id));
+  // Server insertion order defines latest, independently of model clock timestamps.
+  for (const runs of Object.values(workspace.runs)) {
+    for (let n = runs.length - 1; n >= 0; n--) if (runs[n].run_id) runs.splice(n, 1);
+  }
+  for (const run of loaded) replaceRun(run);
+  await refreshSavedList();
+}
+
+function criterionAppeals(run, id) {
+  if (Array.isArray(run.appeals)) return run.appeals.filter(a => a.criterion_id === id);
+  return run.appeals?.[id] ? [run.appeals[id]] : [];
+}
+
+function draftKey(run, id, prior) { return [run.run_id, id, prior?.appeal_id || 'new'].join(':'); }
+function cacheWorkspace() {
+  try { localStorage.setItem(storageKey, JSON.stringify(workspace)); } catch { /* persist reports storage failures */ }
+}
+
+function renderImportErrors() {
+  const errors = $("import-errors");
+  errors.replaceChildren();
+  errors.hidden = !workspace.importErrors?.length;
+  for (const error of workspace.importErrors || []) errors.append(node('p', error.conversation_id + ': ' + error.error));
+}
 
 function node(tag, text, className) {
   const element = document.createElement(tag);
@@ -47,7 +103,11 @@ async function api(path, body) {
   };
   const response = await fetch(path, options);
   const json = await response.json();
-  if (!response.ok) throw new Error(json.error || "Запрос не выполнен.");
+  if (!response.ok) {
+    const error = new Error(json.error || "Запрос не выполнен.");
+    error.status = response.status;
+    throw error;
+  }
   return json;
 }
 
@@ -86,7 +146,20 @@ function showView(view, tab) {
 
 function openRecord(index) {
   selectRecord(index);
-  showView("review", "dialogue");
+  const run = workspace.runs[index]?.[historyIndex];
+  const summary = savedLatest.get(workspace.records[index].conversation_id);
+  const critical = listFilter === "final-critical" ? summary?.final_critical_reasons : summary?.critical_reasons;
+  const criterion = listFilter === "appeal"
+    ? run?.appeals.find(a => a.status === "open")?.criterion_id
+    : critical?.[0]?.criterion_id;
+  showView("review", criterion ? "score" : "dialogue");
+  if (criterion) {
+    renderResult(criterion);
+    const evidence = listFilter === 'final-critical' ? critical?.[0]?.evidence?.[0]
+      : run.original.judgments[criterion]?.evidence[0];
+    if (evidence) showEvidence(evidence);
+    if (window.matchMedia('(max-width: 760px)').matches) setReviewTab('score');
+  }
   $("transcript-title").focus({preventScroll: true});
 }
 
@@ -126,26 +199,16 @@ function runKey(audit) {
 
 async function importResults(payload) {
   if (busy) return;
-  const ids = new Set(Array.isArray(payload?.results) ? payload.results.map((row) => row?.conversation_id) : []);
-  const records = workspace.records.filter((record) => ids.has(record.conversation_id));
-  if (!records.length && ids.size) throw new Error("Сначала загрузите соответствующие диалоги.");
-  const checked = await api("/api/import-results", {payload, records});
-  if (busy) return;
-  const indexes = new Map(workspace.records.map((record, index) => [record.conversation_id, index]));
-  let added = 0;
-  for (const result of checked.results) {
-    const index = indexes.get(result.conversation_id);
-    const runs = workspace.runs[index] ??= [];
-    if (runs.some((run) => runKey(run.original.audit) === runKey(result.audit))) continue;
-    runs.push({original: result, appeals: {}, source: "batch"});
-    added += 1;
-  }
-  $("filter").value = "";
-  $("critical-only").checked = false;
-  listFilter = "all";
-  selectRecord(indexes.get(checked.results[0].conversation_id));
-  showView("review", "score");
-  persist("Добавлено оценок: " + added + " · ошибок в пакете: " + checked.failed);
+  const known = new Set(Object.values(workspace.runs).flat().map(run => run.run_id));
+  const checked = await api("/api/import-results", {payload, records: workspace.records});
+  for (const id of checked.run_ids) replaceRun(await api('/api/runs/' + id));
+  await refreshSavedList();
+  if (selected !== undefined) selectRecord(selected);
+  workspace.importErrors = checked.errors;
+  renderImportErrors();
+  persist("Проверено оценок: " + checked.results.length + ". Новых запусков: "
+    + checked.run_ids.filter(id => !known.has(id)).length + ". Ошибок обработки: " + checked.errors.length);
+  showView('dialogues');
 }
 
 function handleUpload(id, importFile) {
@@ -183,10 +246,13 @@ function renderList() {
   for (const [index, conversation] of workspace.records.entries()) {
     const run = workspace.runs[index]?.at(-1);
     const latest = run?.original;
-    const critical = Object.values(latest?.score.flags ?? {}).some(Boolean);
+    const saved = savedLatest.get(conversation.conversation_id);
+    const critical = saved?.original_critical || false;
     if (!(conversation.conversation_id + " " + conversation.language).toLowerCase().includes(search)) continue;
-    if ($("critical-only").checked && !critical) continue;
-    if (listFilter === "pending" && latest) continue;
+    if (listFilter === "critical" && !critical) continue;
+    if (listFilter === "final-critical" && !saved?.final_critical) continue;
+    if (listFilter === "appeal" && !saved?.open_appeals) continue;
+    if (listFilter === "pending" && (saved || latest)) continue;
     const button = node("button", undefined, "record");
     button.type = "button";
     button.dataset.recordIndex = String(index);
@@ -198,8 +264,9 @@ function renderList() {
       node("span", conversation.language, "record-meta"));
     const end = node("span", undefined, "record-end" + (critical ? " attention" : ""));
     if (latest) {
-      end.append(node("span", scoreText((run.finalScore || latest.score).total), "record-score"));
-      if (critical) end.append(node("span", "Ошибка ИИ", "record-state attention"));
+      end.append(node("span", scoreText(saved ? saved.final_score : (run.final_score || run.finalScore || latest.score).total), "record-score"));
+      if (critical) end.append(node("span", saved.final_critical ? "Грубая ошибка ИИ" : "Флаг ИИ снят", "record-state attention"));
+      if (saved?.open_appeals) end.append(node('span', 'Апелляций: ' + saved.open_appeals, 'record-state'));
     } else {
       end.append(node("span", undefined, "record-chevron"));
     }
@@ -285,66 +352,67 @@ function scoreMeter(value) {
 function reviewForm(run, item, prior, current) {
   const form = node("form", undefined, "review");
   const reason = node("textarea");
-  reason.required = true;
-  reason.maxLength = 1000;
+  reason.required = true; reason.maxLength = 1000;
+  reason.setAttribute('aria-label', prior ? 'Причина решения' : 'Комментарий к апелляции');
+  const key = draftKey(run, item.id, prior);
+  workspace.drafts ??= {};
+  const draft = workspace.drafts[key] ??= {reason: '', answer: current};
+  reason.value = draft.reason;
+  reason.addEventListener('input', () => { draft.reason = reason.value; cacheWorkspace(); });
   const reasonLabel = node("label", prior ? "Причина решения" : "Комментарий к апелляции");
   reasonLabel.append(reason);
   let answer;
   if (prior) {
     answer = node("select");
+    answer.setAttribute('aria-label', 'Решение проверяющего');
     for (const value of answersFor(item)) {
-      const option = node("option", answerText(value));
-      option.value = JSON.stringify(value);
-      option.selected = value === current;
-      answer.append(option);
+      const option = node("option", answerText(value)); option.value = JSON.stringify(value);
+      option.selected = value === draft.answer; answer.append(option);
     }
-    const answerLabel = node("label", "Решение проверяющего");
-    answerLabel.append(answer);
-    form.append(answerLabel);
+    answer.addEventListener('change', () => { draft.answer = JSON.parse(answer.value); cacheWorkspace(); });
+    const answerLabel = node("label", "Решение проверяющего"); answerLabel.append(answer); form.append(answerLabel);
   }
-  const button = node("button", prior ? "Сохранить решение" : "Подать апелляцию", "secondary");
+  const button = node("button", prior ? "Сохранить решение" : "Подать апелляцию", "primary");
   form.append(reasonLabel, button);
-  form.addEventListener("submit", async (event) => {
+  form.addEventListener("submit", async event => {
     event.preventDefault();
     const message = reason.value.trim();
     if (!message) return status("Добавьте комментарий.", true);
-    if (!prior) {
-      run.appeals[item.id] = {message, opened_at: new Date().toISOString()};
-      persist("Апелляция сохранена.");
-      renderResult(item.id);
-      return;
-    }
-    if (pendingReviews.has(run)) return;
-    pendingReviews.add(run);
-    button.disabled = true;
-    const next = JSON.parse(answer.value);
-    const answers = Object.fromEntries(run.original.rubric.map(({id}) => [
-      id, run.appeals[id]?.decision?.answer ?? run.original.judgments[id].answer
-    ]));
-    answers[item.id] = next;
+    if (pendingReviews.has(run.run_id)) return;
+    pendingReviews.add(run.run_id); button.disabled = true;
     try {
-      const score = await api("/api/recalculate", {rubric: run.original.rubric, answers});
-      prior.decision = {answer: next, reason: message, decided_at: new Date().toISOString()};
-      run.finalScore = score;
-      pendingReviews.delete(run);
-      persist("Решение сохранено. Итог пересчитан.");
+      const body = prior
+        ? {run_id: run.run_id, appeal_id: prior.appeal_id, answer: JSON.parse(answer.value), reason: message, expected_revision: run.revision}
+        : {run_id: run.run_id, criterion_id: item.id, message, expected_revision: run.revision};
+      const updated = await api(prior ? '/api/reviews' : '/api/appeals', body);
+      replaceRun(updated); delete workspace.drafts[key];
+      const conflict = workspace.conflictDrafts?.[run.run_id];
+      if (conflict?.criterion_id === item.id && conflict.message === message) delete workspace.conflictDrafts[run.run_id];
+      await refreshSavedList();
+      persist(prior ? "Решение сохранено на сервере. Итог пересчитан." : "Апелляция сохранена на сервере.");
       renderResult(item.id);
     } catch (error) {
-      status(error.message, true);
-    } finally {
-      pendingReviews.delete(run);
-      button.disabled = false;
-    }
+      if (error.status === 409) {
+        workspace.conflictDrafts ??= {};
+        workspace.conflictDrafts[run.run_id] = {criterion_id: item.id, message, answer: prior ? JSON.parse(answer.value) : null};
+        cacheWorkspace();
+        try { replaceRun(await api('/api/runs/' + run.run_id)); await refreshSavedList(); renderResult(item.id); }
+        catch (refreshError) { status(refreshError.message, true); return; }
+        status("Запуск изменён в другой вкладке. Данные обновлены, черновик сохранён. Сверьте решение перед повторным сохранением.", true);
+      } else status(error.message, true);
+    } finally { pendingReviews.delete(run.run_id); button.disabled = false; }
   });
   return form;
 }
 
 function renderCriterion(run, item, finalScore, opened) {
   const original = run.original.judgments[item.id];
-  const appeal = run.appeals[item.id];
-  const current = appeal?.decision?.answer ?? original.answer;
+  const appeals = criterionAppeals(run, item.id);
+  const appeal = appeals.findLast(a => a.status === 'open');
+  const current = run.final_answers?.[item.id] ?? appeals.at(-1)?.decision?.answer ?? original.answer;
   const row = node("details", undefined, "criterion");
   row.open = opened;
+  row.dataset.criterionId = item.id;
   const summary = node("summary");
   const tone = item.type === "flag" ? (current === "yes" ? "fail" : "skip")
     : {yes: "pass", no: "fail", na: "skip"}[current] ?? "number";
@@ -353,24 +421,26 @@ function renderCriterion(run, item, finalScore, opened) {
   const points = finalScore.criteria[item.id];
   const weight = item.type === "flag" ? "Отдельный флаг" :
     "Вес " + item.weight + " · начислено " + scoreText(points.points) + " из " + scoreText(points.effective_weight);
-  row.append(node("p", weight, "meta"), node("p", original.reason));
-  if (appeal?.decision) row.append(node("p", "Исходная оценка ИИ: " + answerText(original.answer), "meta"));
+  row.append(node("p", weight, "meta"), node("p", "Объяснение ИИ: " + original.reason));
+  row.append(node("p", "Исходная оценка ИИ: " + answerText(original.answer), "meta"));
+  row.append(node('p', 'Реплики исходной оценки ИИ:', 'meta'));
   for (const span of original.evidence) {
     const link = node("a", "#" + span.start + (span.end === span.start ? "" : "–" + span.end), "evidence");
     link.href = "#message-" + span.start;
     link.addEventListener("click", (event) => { event.preventDefault(); showEvidence(span); });
     row.append(link);
   }
-  if (appeal) row.append(node("p", "Апелляция: " + appeal.message));
-  if (appeal?.decision) {
-    row.append(node("p", "Решение: " + answerText(current) + " · " + appeal.decision.reason));
-  } else {
-    const panel = node("details", undefined, "appeal-panel");
-    panel.open = Boolean(appeal);
-    panel.append(node("summary", appeal ? "Рассмотреть апелляцию" : "Оспорить оценку"),
-      reviewForm(run, item, appeal, current));
-    row.append(panel);
+  if (appeals.length) row.append(node('h4', 'История апелляций'));
+  for (const entry of appeals) {
+    row.append(node('p', 'Апелляция: ' + entry.message));
+    if (entry.decision) row.append(node('p', 'Решение проверяющего: ' + answerText(entry.decision.answer) + ' · ' + entry.decision.reason));
+    else row.append(node('p', 'Открыта · ' + (entry.opened_at || ''), 'meta'));
   }
+  if (run.run_id) {
+    const panel = node('details', undefined, 'appeal-panel'); panel.open = Boolean(appeal);
+    panel.append(node('summary', appeal ? 'Рассмотреть апелляцию' : (appeals.length ? 'Подать новую апелляцию' : 'Оспорить оценку')),
+      reviewForm(run, item, appeal, current)); row.append(panel);
+  } else row.append(node('p', 'Локальная история браузера. Сохраните запуск на сервере для пересмотра.', 'meta'));
   return row;
 }
 
@@ -398,7 +468,16 @@ function renderResult(openCriterion, reveal = false) {
     return;
   }
   const original = run.original;
-  const final = run.finalScore || original.score;
+  const final = run.final_score || run.finalScore || original.score;
+  const conflict = workspace.conflictDrafts?.[run.run_id];
+  if (conflict) {
+    const draft = node('aside', undefined, 'conflict-draft');
+    draft.append(node('strong', 'Неотправленный черновик после конфликта · ' + conflict.criterion_id),
+      node('p', (conflict.answer === null ? '' : answerText(conflict.answer) + ' · ') + conflict.message));
+    const dismiss = node('button', 'Закрыть черновик', 'secondary');
+    dismiss.addEventListener('click', () => { delete workspace.conflictDrafts[run.run_id]; cacheWorkspace(); draft.remove(); });
+    draft.append(dismiss); pane.append(draft);
+  }
   const totals = node("div", undefined, "totals");
   const total = node("div", undefined, "final-total");
   const value = node("div", undefined, "total-value");
@@ -423,9 +502,48 @@ function renderResult(openCriterion, reveal = false) {
   const sections = node("ul", undefined, "section-list");
   for (const [name, row] of Object.entries(final.sections)) sections.append(node("li", name + " · " + scoreText(row.points) + " / " + scoreText(row.max)));
   if (sections.childElementCount) info.append(sections);
-  const source = run.source === "batch" ? "Импорт из CLI" : "Запуск в приложении";
+  const source = run.run_id ? "Сохранено на сервере · ревизия " + run.revision : "Локальная история браузера";
   info.append(node("p", source + " · " + original.audit.model + " · чек-лист " + original.audit.rubric_sha256.slice(0, 8) + " · вход " + original.audit.input_sha256.slice(0, 8), "meta"));
+  const settings = original.audit.settings;
+  info.append(node('p', 'Промпт: ' + original.audit.prompt + ' · ' + original.audit.provider
+    + ' · попыток: ' + (original.audit.attempts ?? '—')
+    + (settings ? ' · рассуждение: ' + (typeof settings.thinking !== 'boolean' ? 'не указано'
+      : settings.thinking ? (original.audit.reasoning_observed ? 'подтверждено ответом' : 'запрошено') : 'выключено')
+      : ' · прежний запуск без снимка настроек'), 'meta'));
+  if (original.audit.repair_criteria?.length) info.append(node('p', 'Повторно проверены критерии: ' + original.audit.repair_criteria.join(', '), 'meta'));
   pane.append(info);
+  if (!run.run_id) {
+    const migrate = node('button', 'Сохранить запуск на сервере', 'primary');
+    migrate.addEventListener('click', async () => {
+      migrate.disabled = true;
+      try {
+        const conversation = workspace.records[selected];
+        const imported = await api('/api/import-results', {records: [conversation], payload: {results: [original], errors: []}});
+        let restored = await api('/api/runs/' + imported.run_ids[0]);
+        // Keep the exact local snapshot, including its original client timestamps.
+        workspace.legacyBackup ??= []; workspace.legacyBackup.push(JSON.parse(JSON.stringify(run))); cacheWorkspace();
+        for (const [id, old] of Object.entries(run.appeals || {})) {
+          const pending = restored.appeals.find(a => a.criterion_id === id && a.status === 'open');
+          const prior = restored.appeals.find(a => a.criterion_id === id && a.message === old.message);
+          if (pending && pending.message !== old.message) throw new Error('По критерию уже есть другая серверная апелляция. Сверьте историю перед переносом.');
+          if (prior?.decision && old.decision && prior.decision.answer !== old.decision.answer) throw new Error('Решение в серверной истории отличается от браузерного. Оба варианта сохранены для сверки.');
+          if (prior && !pending) continue;
+          if (!pending) restored = await api('/api/appeals', {run_id: restored.run_id, criterion_id: id, message: old.message, expected_revision: restored.revision});
+          if (old.decision) {
+            const appeal = restored.appeals.find(a => a.criterion_id === id && a.status === 'open');
+            restored = await api('/api/reviews', {run_id: restored.run_id, appeal_id: appeal.appeal_id,
+              answer: old.decision.answer, reason: old.decision.reason, reviewer: 'Импорт истории браузера', expected_revision: restored.revision});
+          }
+        }
+        const runs = workspace.runs[selected]; const position = runs.indexOf(run);
+        if (position >= 0) runs.splice(position, 1);
+        replaceRun(restored); await refreshSavedList(); selectRecord(selected);
+        persist('История перенесена на сервер. Исходные даты браузера сохранены в резервной копии.');
+      } catch (error) { status(error.message, true); }
+      finally { migrate.disabled = false; }
+    });
+    pane.append(migrate);
+  }
 }
 
 function answersFor(item) {
@@ -509,9 +627,11 @@ function readEditor() {
 async function boot() {
   const config = await api("/api/config");
   defaults = config.rubric;
-  $("model").textContent = config.model;
+  $("model").textContent = config.model + " · доступность не проверена";
   try { workspace = JSON.parse(localStorage.getItem(storageKey)); } catch { workspace = null; }
   workspace ??= {rubric: defaults, records: [], runs: {}};
+  renderImportErrors();
+  await restoreServerHistory();
   fillEditor(workspace.rubric);
   selectRecord(0);
   if (!workspace.records.length) await importPayload(await api("/synthetic.json"), "Синтетические примеры загружены", false);
@@ -537,6 +657,10 @@ async function boot() {
       {opacity: 1, transform: "none", filter: "blur(0)"}
     ], {duration: 540, easing: "cubic-bezier(.18,.8,.2,1)"});
     $("filter").focus({preventScroll: true});
+  });
+  $('refresh-runs').addEventListener('click', async () => {
+    try { await restoreServerHistory(); selectRecord(selected); persist('История обновлена с сервера.'); }
+    catch (error) { status(error.message, true); }
   });
   $("filter").addEventListener("input", renderList);
   $("critical-only").addEventListener("change", () => {
@@ -603,10 +727,13 @@ async function boot() {
     try {
       const result = await api("/api/score", {conversation: workspace.records[index], rubric: workspace.rubric});
       const runs = workspace.runs[index] ??= [];
-      runs.push({original: result, appeals: {}});
+      const stored = await api('/api/runs/' + result.run_id);
+      replaceRun(stored);
+      await refreshSavedList();
       if (index === selected) historyIndex = runs.length - 1;
       reveal = index === selected;
-      persist("Оценка сохранена.");
+      persist("Оценка сохранена на сервере.");
+      $("model").textContent = result.audit.model + " · последний запрос выполнен";
     } catch (error) { status(error.message, true); }
     finally {
       busy = false;

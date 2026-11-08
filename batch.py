@@ -1,25 +1,19 @@
 """Import organizer transcripts, score a batch, or compare against human labels."""
 import argparse
+from contextlib import contextmanager
+import copy
 import json
 import os
 import re
-from contextlib import contextmanager
+import tempfile
 from pathlib import Path
-from tempfile import NamedTemporaryFile
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit, urlunsplit
 from urllib.request import urlopen
 
-from engine import (DEFAULT_RUBRIC, PROMPT_VERSION, ModelError, calculate, extract_records,
-                    filled, fingerprint, model_name, provider_name, read_json, require,
-                    score_conversation, validate_batch_results, validate_rubric)
-
-SUBMISSION_CRITERIA = (
-    ("greeting", "contact"), ("needs", "discovery"), ("identity", "identification"),
-    ("consultation", "consultation"), ("empathy", "empathy"), ("management", "dialogue"),
-    ("closing", "closure"), ("critical", "critical"),
-)
-SUBMISSION_VALUES = {"yes": True, "no": False, "na": None}
+import engine
+from engine import DEFAULT_RUBRIC, ModelError, allowed_answers, calculate, extract_records, fingerprint, read_json, require, score_conversation, validate_judgments, validate_rubric
+from results_io import validate_runs
 
 
 def write_json(path, result):
@@ -27,32 +21,17 @@ def write_json(path, result):
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = None
     try:
-        with NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent, delete=False) as stream:
-            temporary = Path(stream.name)
-            json.dump(result, stream, ensure_ascii=False, indent=2)
-            stream.write("\n")
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent,
+                                         prefix=path.name + ".", suffix=".tmp", delete=False) as handle:
+            temporary = Path(handle.name)
+            json.dump(result, handle, ensure_ascii=False, indent=2, allow_nan=False)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
         temporary.replace(path)
     finally:
         if temporary is not None:
             temporary.unlink(missing_ok=True)
-
-
-@contextmanager
-def reserve_checkpoint(path):
-    """Hold an OS lock for one batch writer, released even if the process exits."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    lock_path = path.with_name(path.name + ".lock")
-    with lock_path.open("a+b") as lock:
-        try:
-            if os.name == "nt":
-                import msvcrt
-                msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, 1)
-            else:
-                import fcntl
-                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except OSError as error:
-            raise ValueError(f"Another batch is writing {path.name}.") from error
-        yield
 
 
 def fetch_dataset(args):
@@ -74,150 +53,243 @@ def fetch_dataset(args):
 
 
 def run_batch(args):
+    with reserve_checkpoint(Path(args.output).resolve()):
+        return _run_batch(args)
+
+
+def _run_batch(args):
     records = extract_records(read_json(args.input))
+    expected = getattr(args, "expect_count", None)
+    require(expected is None or len(records) == expected, f"Expected {expected} transcripts, received {len(records)}.")
+    revision = getattr(args, "model_revision", None)
+    if revision is not None:
+        os.environ["CQA_MODEL_REVISION"] = revision
     rubric = validate_rubric(read_json(args.rubric) if args.rubric else DEFAULT_RUBRIC)
-    if args.expect_count is not None:
-        require(len(records) == args.expect_count, f"Expected {args.expect_count} transcripts, received {len(records)}.")
-    destination = Path(args.output).resolve()
-    inputs = [args.input, args.rubric] if args.rubric else [args.input]
-    require(destination not in {Path(path).resolve() for path in inputs}, "Choose an output path separate from the inputs.")
-    run = {"dataset_sha256": fingerprint(records), "record_count": len(records), "rubric_sha256": fingerprint(rubric),
-           "prompt": PROMPT_VERSION, "provider": provider_name(), "model": model_name(), "model_revision": args.model_revision}
-    ids = [record["conversation_id"] for record in records]
-    with reserve_checkpoint(destination):
-        results, errors = {}, {}
-        if args.resume and destination.exists():
-            checkpoint = read_json(destination)
-            require(isinstance(checkpoint, dict) and checkpoint.get("run") == run,
-                    "Checkpoint provenance differs. Use the original settings or a new output file.")
-            for name, rows_by_id in (("results", results), ("errors", errors)):
-                for row in checkpoint[name]:
-                    cid = row["conversation_id"]
-                    require(cid in ids and cid not in rows_by_id, "Checkpoint has an unexpected or duplicate ID.")
-                    rows_by_id[cid] = row
-            require(not results.keys() & errors.keys(), "Checkpoint contains both a result and an error for a transcript.")
-        for index, conversation in enumerate(records, 1):
-            cid = conversation["conversation_id"]
-            if cid in results:
-                print(f"{index}/{len(records)} already scored", flush=True)
-                continue
-            try:
-                results[cid] = score_conversation(conversation, rubric)
-                errors.pop(cid, None)
-                print(f"{index}/{len(records)} scored", flush=True)
-            except ModelError as error:
-                errors[cid] = {"conversation_id": cid, "error": str(error)}
-                print(f"{index}/{len(records)} failed", flush=True)
-            write_json(destination, {"run": run, "rubric_sha256": run["rubric_sha256"],
-                                     "results": [results[cid] for cid in ids if cid in results],
-                                     "errors": [errors[cid] for cid in ids if cid in errors]})
-        return 1 if errors else 0
+    require(Path(args.input).resolve() != Path(args.output).resolve(), "Input and output must be different files.")
+    if args.rubric:
+        require(Path(args.rubric).resolve() != Path(args.output).resolve(), "Output must not overwrite the rubric.")
+    manifest = batch_manifest(records, rubric)
+    output = {"schema_version": "cqa-batch-v1", "manifest": manifest,
+              "rubric_sha256": fingerprint(rubric), "results": [], "errors": []}
+    if getattr(args, "resume", False):
+        require(Path(args.output).is_file(), "Resume requires an existing output checkpoint.")
+        output = validate_checkpoint(read_json(args.output), records, rubric, manifest)
+    completed = {row["conversation_id"] for row in output["results"]}
+    # An interrupt before the first response still leaves a recoverable manifest.
+    write_json(args.output, output)
+    for index, conversation in enumerate(records, 1):
+        cid = conversation["conversation_id"]
+        if cid in completed:
+            print(f"{index}/{len(records)} reused", flush=True)
+            continue
+        output["errors"] = [row for row in output["errors"] if row["conversation_id"] != cid]
+        try:
+            output["results"].append(score_conversation(conversation, rubric))
+            print(f"{index}/{len(records)} scored", flush=True)
+        except ModelError as error:
+            output["errors"].append({"conversation_id": conversation["conversation_id"], "error": str(error)})
+            print(f"{index}/{len(records)} failed", flush=True)
+        write_json(args.output, output)
+    return 1 if output["errors"] else 0
 
 
-def compare(results, labels, rubric):
-    """Accept adjudicated labels keyed by conversation ID, then criterion ID."""
-    require(isinstance(labels, dict) and bool(labels), "Expected a non-empty mapping of IDs to human answers.")
-    gold = {key: calculate(rubric, values) for key, values in labels.items()}
-    by_id = {row["conversation_id"]: row for row in results}
-    require(len(by_id) == len(results), "Predictions contain duplicate conversation IDs.")
-    rubric_hash = fingerprint(rubric)
-    require(all(row["audit"]["rubric_sha256"] == rubric_hash for row in results), "Predictions use a different rubric.")
-    missing, unexpected = sorted(labels.keys() - by_id.keys()), sorted(by_id.keys() - labels.keys())
-    metrics = {item["id"]: {"exact": 0, "compared": 0, "false_na": 0, "missed_na": 0} for item in rubric}
-    errors = []
-    comparable = sorted(labels.keys() & by_id.keys())
+def numbered_turns(conversation):
+    return [{"n": index, "timestamp": row["timestamp"], "speaker": row["speaker"], "text": row["text"]}
+            for index, row in enumerate(conversation["transcript"], 1)]
+
+
+def batch_manifest(records, rubric):
+    """A resume guard identifies the complete input and configured inference request.
+
+    Hashes detect changed inputs/settings; they do not prove model authorship or
+    identify model weights behind a mutable local model alias.
+    """
+    provider = engine.provider_name()
+    endpoint = os.environ.get("CQA_OLLAMA_URL", "http://127.0.0.1:11434") if provider == "ollama" else os.environ.get("CQA_LLAMA_URL", "http://127.0.0.1:8080")
+    settings = engine.inference_settings()
+    return {"version": 1, "dataset_sha256": fingerprint(records), "rubric_sha256": fingerprint(rubric),
+            "provider": provider, "model": engine.model_name(), "prompt": engine.PROMPT_VERSION,
+            "settings": settings, "settings_sha256": fingerprint(settings), "endpoint_sha256": fingerprint(endpoint)}
+
+
+def validate_checkpoint(payload, records, rubric, manifest):
+    require(isinstance(payload, dict) and payload.get("schema_version") == "cqa-batch-v1",
+            "This checkpoint has no resume manifest. Start a new run with another output file.")
+    require(payload.get("manifest") == manifest and payload.get("rubric_sha256") == fingerprint(rubric),
+            "Cannot resume: dataset, rubric, provider, model, prompt or settings changed. Use a new output file.")
+    require(isinstance(payload.get("results"), list) and isinstance(payload.get("errors"), list), "Invalid checkpoint lists.")
+    # Share the UI importer validation, including model/timestamp metadata and
+    # JSON finiteness, so a resumed run is also safe to import into the app.
+    checked = validate_runs(payload, records, allow_empty=True)
+    by_id = {row["conversation_id"]: row for row in records}
+    seen = set()
+    output = copy.deepcopy(payload)
+    output.update(checked)
+    for row in output["results"]:
+        require(isinstance(row, dict), "Invalid checkpoint result.")
+        cid = row.get("conversation_id")
+        require(cid in by_id and cid not in seen, "Checkpoint contains an unknown or duplicate ID.")
+        seen.add(cid)
+        audit = row.get("audit")
+        require(isinstance(audit, dict) and audit.get("rubric_sha256") == manifest["rubric_sha256"]
+                and fingerprint(row.get("rubric")) == manifest["rubric_sha256"], "Checkpoint rubric changed.")
+        turns = numbered_turns(by_id[cid])
+        context = {"language": by_id[cid]["language"], "channel": by_id[cid]["channel"], "messages": turns}
+        require(audit.get("input_sha256") == fingerprint(turns)
+                and audit.get("context_sha256") == fingerprint(context), "Checkpoint transcript or context changed.")
+        require(audit.get("provider") == manifest["provider"] and audit.get("prompt") == manifest["prompt"]
+                and audit.get("settings_sha256") == manifest["settings_sha256"]
+                and audit.get("settings") == manifest["settings"], "Checkpoint inference settings changed.")
+        judgments = validate_judgments(row.get("judgments"), rubric, len(turns))
+        row["score"] = calculate(rubric, {key: value["answer"] for key, value in judgments.items()})
+    for row in output["errors"]:
+        require(isinstance(row, dict) and row.get("conversation_id") in by_id
+                and row["conversation_id"] not in seen and isinstance(row.get("error"), str) and row["error"].strip(),
+                "Checkpoint contains an unknown, duplicate or invalid error.")
+        seen.add(row["conversation_id"])
+    return output
+
+
+def _label(value):
+    return str(value)
+
+
+def _metrics(results_by_id, labels, rubric):
+    comparable = sorted(labels.keys() & results_by_id.keys())
+    metrics = {}
+    for item in rubric:
+        classes = [_label(value) for value in allowed_answers(item)]
+        metrics[item["id"]] = {"exact": 0, "compared": 0, "na_disagreement": 0, "false_na": 0, "missed_na": 0,
+                               "classes": classes,
+                               "confusion_matrix": {gold: {pred: 0 for pred in classes} for gold in classes}}
+        if item["type"] == "scale":
+            metrics[item["id"]].update({"scale_absolute_error_sum": 0, "scale_pairs": 0})
+        if item["type"] == "flag":
+            metrics[item["id"]]["detection"] = {"true_positive": 0, "false_positive": 0,
+                                                  "false_negative": 0, "true_negative": 0}
+    score_errors, queue = [], []
     undefined_total_pairs = 0
     for cid in comparable:
-        prediction = {key: row["answer"] for key, row in by_id[cid]["judgments"].items()}
+        result = results_by_id[cid]
+        prediction = {key: row["answer"] for key, row in result["judgments"].items()}
         actual = calculate(rubric, prediction)["total"]
-        expected = gold[cid]["total"]
+        expected = calculate(rubric, labels[cid])["total"]
+        absolute_error = None
         if actual is not None and expected is not None:
-            errors.append(abs(actual - expected))
+            absolute_error = round(abs(actual - expected), 4)
+            score_errors.append(absolute_error)
         else:
             undefined_total_pairs += 1
-        for key, row in metrics.items():
+        differences, critical_mismatch, na_mismatches = [], False, 0
+        for item in rubric:
+            key, predicted, reference = item["id"], prediction[item["id"]], labels[cid][item["id"]]
+            row = metrics[key]
             row["compared"] += 1
-            predicted_answer, labeled_answer = prediction[key], labels[cid][key]
-            row["exact"] += int(predicted_answer == labeled_answer)
-            row["false_na"] += int(predicted_answer == "na" and labeled_answer != "na")
-            row["missed_na"] += int(labeled_answer == "na" and predicted_answer != "na")
+            row["exact"] += int(predicted == reference)
+            na_disagreement = (predicted == "na") != (reference == "na")
+            row["na_disagreement"] += int(na_disagreement)
+            row["false_na"] += int(predicted == "na" and reference != "na")
+            row["missed_na"] += int(reference == "na" and predicted != "na")
+            row["confusion_matrix"][_label(reference)][_label(predicted)] += 1
+            if item["type"] == "scale" and predicted != "na" and reference != "na":
+                row["scale_absolute_error_sum"] += abs(predicted - reference)
+                row["scale_pairs"] += 1
+            if item["type"] == "flag":
+                name = ("true_positive" if reference == "yes" else "false_positive") if predicted == "yes" else ("false_negative" if reference == "yes" else "true_negative")
+                row["detection"][name] += 1
+                critical_mismatch = critical_mismatch or predicted != reference
+            if predicted != reference:
+                judgment = result["judgments"][key]
+                differences.append({"criterion_id": key, "predicted": predicted, "reference": reference,
+                                    "na_disagreement": na_disagreement, "reason": judgment["reason"],
+                                    "evidence": copy.deepcopy(judgment["evidence"])})
+                na_mismatches += int(na_disagreement)
+        if differences:
+            audit = result["audit"]
+            queue.append({"conversation_id": cid, "predicted_total": actual, "reference_total": expected,
+                          "absolute_score_error": absolute_error, "critical_mismatch": critical_mismatch,
+                          "na_mismatches": na_mismatches, "differences": differences,
+                          "audit": {key: audit.get(key) for key in ("model", "provider", "prompt", "rubric_sha256", "input_sha256")}})
+    total_exact, total_compared = 0, 0
     for row in metrics.values():
-        row["na_disagreement"] = row["false_na"] + row["missed_na"]
+        total_exact += row["exact"]
+        total_compared += row["compared"]
         row["exact_rate"] = row["exact"] / row["compared"] if row["compared"] else None
-    return {"labeled": len(labels), "matched": len(comparable), "missing_ids": missing, "unexpected_ids": unexpected,
-            "total_mae": round(sum(errors) / len(errors), 4) if errors else None, "total_pairs": len(errors),
-            "undefined_total_pairs": undefined_total_pairs, "criteria": metrics}
+        row["na_disagreement_rate"] = row["na_disagreement"] / row["compared"] if row["compared"] else None
+        if "scale_pairs" in row:
+            row["scale_mae"] = row["scale_absolute_error_sum"] / row["scale_pairs"] if row["scale_pairs"] else None
+        if "detection" in row:
+            values = row["detection"]
+            tp, fp, fn = values["true_positive"], values["false_positive"], values["false_negative"]
+            values["precision"] = tp / (tp + fp) if tp + fp else None
+            values["recall"] = tp / (tp + fn) if tp + fn else None
+            values["f1"] = 2 * tp / (2 * tp + fp + fn) if 2 * tp + fp + fn else None
+    queue.sort(key=lambda row: (not row["critical_mismatch"], -row["na_mismatches"],
+                                -(row["absolute_score_error"] or 0), row["conversation_id"]))
+    return {"labeled": len(labels), "matched": len(comparable),
+            "missing_ids": sorted(labels.keys() - results_by_id.keys()),
+            "unexpected_ids": sorted(results_by_id.keys() - labels.keys()),
+            "coverage": len(comparable) / len(labels) if labels else None,
+            "total_mae": round(sum(score_errors) / len(score_errors), 4) if score_errors else None,
+            "total_pairs": len(score_errors), "undefined_total_pairs": undefined_total_pairs,
+            "criterion_exact_rate": total_exact / total_compared if total_compared else None,
+            "criteria": metrics, "review_queue": queue}
 
 
-def submission_payload(dataset, checkpoint, team_name, group):
-    """Convert one complete checkpoint to the organizer's JSON 1.0 format."""
-    require(group in ("dev", "prod"), "The submission group must be dev or prod.")
-    require(filled(team_name, 160), "Provide the exact registered team name.")
-    records = extract_records(dataset)
-    expected_chats, expected_calls = (60, 5) if group == "dev" else (10, 0)
-    require(len(records) == expected_chats + expected_calls and
-            sum(record["channel"] == "voice call" for record in records) == expected_calls,
-            f"{group.upper()} requires {expected_chats} chats and {expected_calls} calls.")
-    if isinstance(dataset, dict) and "isSuccess" in dataset:
-        dataset_group = dataset["data"].get("dataset_group_id")
-        require(isinstance(dataset_group, str) and (dataset_group.upper() == "DEV") == (group == "dev"),
-                "The API group does not match the submission destination.")
-    require(isinstance(checkpoint, dict) and isinstance(checkpoint.get("run"), dict)
-            and isinstance(checkpoint.get("results"), list) and isinstance(checkpoint.get("errors"), list),
-            "A versioned batch checkpoint is required.")
-    run = checkpoint["run"]
-    rubric_hash = fingerprint(DEFAULT_RUBRIC)
-    require(run.get("dataset_sha256") == fingerprint(records) and run.get("record_count") == len(records),
-            "Checkpoint dataset differs from the submission input.")
-    require(run.get("rubric_sha256") == rubric_hash, "The submission requires the default eight-criterion checklist.")
-    require(run.get("provider") in ("ollama", "llamacpp") and filled(run.get("model"), 200)
-            and filled(run.get("prompt"), 200), "Checkpoint lacks valid local model provenance.")
+def compare(results, labels, rubric, records=None):
+    """Team diagnostics against adjudicated labels, not the organizer ranking formula.
 
-    verified = validate_batch_results(checkpoint, records)["results"] if checkpoint["results"] else []
-    results = {row["conversation_id"]: row for row in verified}
-    model_names = {row["audit"]["model"] for row in verified}
-    require(len(model_names) <= 1 and all(
-        row["audit"]["rubric_sha256"] == rubric_hash and row["audit"]["prompt"] == run["prompt"]
-        and row["audit"]["provider"] == run["provider"] for row in verified
-    ), "Checkpoint mixes models, prompts, or checklists.")
-    errors = {}
-    for row in checkpoint["errors"]:
-        require(isinstance(row, dict) and filled(row.get("conversation_id"), 200) and filled(row.get("error"), 1000),
-                "Every failed transcript must have an ID and an error message.")
+    Confusion matrices use reference labels as rows and model predictions as columns.
+    Totals are recomputed from answers; a provided total is never trusted. No missing
+    prediction is converted to zero, and unlabelled predictions do not enter metrics.
+    """
+    validate_rubric(rubric)
+    require(isinstance(labels, dict) and bool(labels), "Expected a non-empty mapping of IDs to human answers.")
+    for cid, answers in labels.items():
+        require(isinstance(cid, str) and bool(cid.strip()), "Label IDs must be non-empty strings.")
+        calculate(rubric, answers)
+    require(isinstance(results, list), "Expected a list of prediction results.")
+    dataset = {row["conversation_id"]: row for row in extract_records(records)} if records is not None else None
+    by_id = {}
+    rubric_hash = fingerprint(rubric)
+    for row in results:
+        require(isinstance(row, dict) and isinstance(row.get("conversation_id"), str), "Invalid prediction result.")
         cid = row["conversation_id"]
-        require(cid not in results and cid not in errors, "Checkpoint repeats a transcript ID.")
-        errors[cid] = row["error"]
-    expected_ids = {record["conversation_id"] for record in records}
-    require((results.keys() | errors.keys()) == expected_ids, "Checkpoint must account for every input ID exactly once.")
-
-    exported = []
-    for record in records:
-        cid = record["conversation_id"]
-        if cid in errors:
-            exported.append({"conversation_id": cid, "status": "error", "criteria": [], "score": None, "error": errors[cid]})
-            continue
-        result = results[cid]
-        criteria = []
-        for key, official_id in SUBMISSION_CRITERIA:
-            row = result["judgments"][key]
-            turns = sorted({n for span in row["evidence"] for n in range(span["start"], span["end"] + 1)})
-            criteria.append({"criterion_id": official_id, "value": SUBMISSION_VALUES.get(row["answer"], row["answer"]),
-                             "rationale": row["reason"], "evidence_turns": turns})
-        exported.append({"conversation_id": cid, "status": "ok", "criteria": criteria,
-                         "score": {"final_score": result["score"]["total"], "critical_flag": result["score"]["flags"]["critical"]}})
-    return {"schema_version": "1.0", "team_name": team_name.strip(),
-            "model": {"mode": "local", "name": next(iter(model_names), run["model"])}, "results": exported}
-
-
-def export_submission(args):
-    destination = Path(args.output or f"results/{args.group}/results.json").resolve()
-    require(destination not in {Path(args.input).resolve(), Path(args.predictions).resolve()},
-            "Choose a submission output separate from both inputs.")
-    payload = submission_payload(read_json(args.input), read_json(args.predictions), args.team_name, args.group)
-    write_json(destination, payload)
-    failures = sum(row["status"] == "error" for row in payload["results"])
-    print(f"Exported {len(payload['results'])} records with {failures} errors to {destination}.")
-    return 1 if failures else 0
+        require(cid not in by_id, "Predictions contain duplicate conversation IDs.")
+        require(isinstance(row.get("audit"), dict) and row["audit"].get("rubric_sha256") == rubric_hash,
+                "Predictions use a different rubric.")
+        if "rubric" in row:
+            require(fingerprint(row["rubric"]) == rubric_hash, "The saved prediction rubric is inconsistent.")
+        if dataset is not None:
+            require(cid in dataset, "A prediction ID is missing from the supplied dataset.")
+            turns = numbered_turns(dataset[cid])
+            require(row["audit"].get("input_sha256") == fingerprint(turns), "A prediction transcript differs from the supplied dataset.")
+            if "context_sha256" in row["audit"]:
+                context = {"language": dataset[cid]["language"], "channel": dataset[cid]["channel"], "messages": turns}
+                require(row["audit"]["context_sha256"] == fingerprint(context), "A prediction context differs from the supplied dataset.")
+            count = len(turns)
+        else:
+            count = 500  # Syntax bound only; supply --dataset to verify actual message ranges.
+        validate_judgments(row.get("judgments"), rubric, count)
+        by_id[cid] = row
+    report = _metrics(by_id, labels, rubric)
+    report["metric_scope"] = "Team diagnostics on matched human-labelled dialogs; not the official ranking formula."
+    report["evidence_checked_against_dataset"] = dataset is not None
+    if dataset is not None:
+        require(set(labels) <= dataset.keys(), "A label ID is missing from the supplied dataset.")
+        report["breakdowns"] = {}
+        for field in ("language", "channel"):
+            groups = {}
+            for value in sorted({row[field] for row in dataset.values()}):
+                group_labels = {cid: answers for cid, answers in labels.items() if dataset[cid][field] == value}
+                if not group_labels:
+                    continue
+                group_results = {cid: row for cid, row in by_id.items() if dataset[cid][field] == value}
+                group = _metrics(group_results, group_labels, rubric)
+                group.pop("review_queue")
+                groups[value] = group
+            report["breakdowns"][field] = groups
+    return report
 
 
 def main():
@@ -228,40 +300,81 @@ def main():
     fetch.add_argument("--group", default="DEV")
     fetch.add_argument("--output", required=True)
     score = commands.add_parser("score")
+    score.add_argument("--expect-count", type=int)
+    score.add_argument("--model-revision")
     score.add_argument("input")
     score.add_argument("--rubric")
     score.add_argument("--output", required=True)
-    score.add_argument("--expect-count", type=int, help="Require this many input records before calling the model.")
-    score.add_argument("--model-revision", help="Record the pinned model revision or weights checksum.")
-    score.add_argument("--resume", action="store_true", help="Reuse completed results for the same input and configuration.")
+    score.add_argument("--resume", action="store_true", help="Reuse validated successes in an unchanged output checkpoint; retry failed/unprocessed dialogs.")
     compare_parser = commands.add_parser("compare")
     compare_parser.add_argument("predictions")
     compare_parser.add_argument("labels")
     compare_parser.add_argument("--rubric")
+    compare_parser.add_argument("--dataset", help="Validate transcript evidence and report metrics by language/channel.")
+    compare_parser.add_argument("--report", help="Save the diagnostic report and review queue as JSON.")
     export = commands.add_parser("export", help="Export organizer results JSON 1.0.")
-    export.add_argument("input", help="Original transcript JSON.")
-    export.add_argument("predictions", help="Complete local scoring checkpoint.")
+    export.add_argument("input")
+    export.add_argument("predictions")
     export.add_argument("--team-name", required=True)
     export.add_argument("--group", choices=("dev", "prod"), required=True)
-    export.add_argument("--output", help="Defaults to results/<group>/results.json.")
+    export.add_argument("--output")
     args = parser.parse_args()
     try:
+        if args.command == "export":
+            from results_io import make_submission
+            output = Path(args.output or f"results/{args.group}/results.json").resolve()
+            require(output not in {Path(args.input).resolve(), Path(args.predictions).resolve()},
+                    "--output must not overwrite dataset or predictions.")
+            result = make_submission(read_json(args.predictions), read_json(args.input), args.group, args.team_name)
+            write_json(output, result)
+            return 1 if any(row["status"] == "error" for row in result["results"]) else 0
         if args.command == "fetch":
             fetch_dataset(args)
         elif args.command == "score":
             return run_batch(args)
-        elif args.command == "export":
-            return export_submission(args)
         else:
             rubric = validate_rubric(read_json(args.rubric) if args.rubric else DEFAULT_RUBRIC)
-            report = compare(read_json(args.predictions)["results"], read_json(args.labels), rubric)
+            payload = read_json(args.predictions)
+            report = compare(payload["results"], read_json(args.labels), rubric,
+                             read_json(args.dataset) if args.dataset else None)
+            prediction_errors = payload.get("errors", [])
+            require(isinstance(prediction_errors, list), "Prediction errors must be a list.")
+            report["prediction_errors"] = prediction_errors
+            if args.report:
+                protected = {Path(value).resolve() for value in (args.predictions, args.labels, args.rubric, args.dataset) if value}
+                require(Path(args.report).resolve() not in protected, "Report output must not overwrite input files.")
+                write_json(args.report, report)
             print(json.dumps(report, ensure_ascii=False, indent=2))
             return 1 if report["missing_ids"] or report["unexpected_ids"] else 0
     except (OSError, KeyError, TypeError, ValueError) as error:
         parser.exit(2, f"Error: {error}\n")
-    except KeyboardInterrupt:
-        parser.exit(130, "Interrupted. Completed batch results are in the output checkpoint.\n")
     return 0
+
+
+
+
+
+@contextmanager
+def reserve_checkpoint(path):
+    """Hold an OS lock for one batch writer, released even if the process exits."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = path.with_name(path.name + ".lock")
+    with lock_path.open("a+b") as lock:
+        try:
+            if os.name == "nt":
+                import msvcrt
+                msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as error:
+            raise ValueError(f"Another batch is writing {path.name}.") from error
+        yield
+
+
+def submission_payload(dataset, checkpoint, team_name, group):
+    from results_io import make_submission
+    return make_submission(checkpoint, dataset, group, team_name)
 
 
 if __name__ == "__main__":
