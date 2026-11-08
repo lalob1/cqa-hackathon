@@ -1,5 +1,21 @@
 # Approved blue app checkpoint
 
+## Server workflow integration, 2026-11-08
+
+The branch `fix/dev-review-workflow` integrates SQLite history, saved appeals and decisions, result imports, revision conflicts and latest-run filters with the team carousel from `d53c114`. The older checks below describe earlier checkpoints; current model findings are in [DEV_REVIEW_SUMMARY.md](DEV_REVIEW_SUMMARY.md).
+
+- Real local llama.cpp inference on a new synthetic dialogue, evidence turns 3–4, appeal and reviewer decision: original 53.85, reviewed 76.92, original retained. This live sequence used V5; an edited nine-rule live run used V6. The 12-case V9 calibration is reported separately.
+- Cleared browser workspace storage, reloaded and restored 13 scored conversations with the saved appeal from SQLite. Imported the same 12-result file twice; database run count stayed 14.
+- A second update made a browser form stale: HTTP 409 refreshed the run and retained the unsent draft over reload. An unrelated successful review retained it; explicit resubmission cleared it.
+- Invalid evidence range returned HTTP 400 without a saved result. An errors-only test fixture stayed visibly unscored after reload; it is not presented as real model output.
+- After the carousel merge, AI-critical filtering selected the expected historical result, expanded its critical criterion and highlighted source turn 12. The pending filter showed one unscored dialogue and no numeric score.
+- A new appeal on an imported historical result appeared alone under open appeals. Reviewing closing as No changed 100.00 to 93.75; reloading restored both original and final scores. Other original criterion values remained unchanged.
+- Chrome viewport checks after merging at 320 and 390 px found document widths 305 and 375 px; screenshots inspected. Physical phone testing was not performed. Browser console after the merge had no JavaScript errors; deliberately triggered HTTP 400/409 cases are recorded separately.
+- Migrated a reconstructed legacy browser snapshot of an actual saved run. The server handle and 14-run database count were retained; original 53.85 and final 76.92 remained available. The exact browser backup, server handle and restored scores were verified.
+- 92 Python tests passed. JavaScript syntax checks passed. Tests cover contracts and persistence, not model accuracy.
+- Final V11 live sequence: a previously unscored synthetic dialogue received 100. Evidence highlighted source turn 1. An appeal challenged the irrelevant tariff example in the identification rationale; the reviewer confirmed N/A using turn 5, and recalculation correctly stayed 100. Reload restored revision 2, the decision and unchanged original model rationale. The pending-appeal filter showed this run alone. Final 320/390 px widths were 309/375 px; no JavaScript console errors occurred.
+- Final batch import saved 10 V11 runs and displayed two processing errors separately. Repeating it created zero runs. The critical filter correctly includes one V11 result and an older V4 result whose newer attempt failed; the V4 row is not counted as a V11 detection.
+
 Verified 2026-11-08. Saved before the F-and-coins background experiment on branch [checkpoint/blue-app-2026-11-08](https://github.com/lalob1/cqa-hackathon/tree/checkpoint/blue-app-2026-11-08). The earlier hero-crown version is on [checkpoint/crown-layout-2026-11-08](https://github.com/lalob1/cqa-hackathon/tree/checkpoint/crown-layout-2026-11-08), commit `f5465b9`.
 
 The user approved a simpler app inspired by the supplied Freedom mobile screenshots: one grouped dialogue list, rounded blue surfaces, chat bubbles, three navigation destinations, and details revealed when needed. The crown and equation occupy the lowest background layer. The references informed hierarchy and spacing; banking products, payments, advertisements and a message composer were not added.

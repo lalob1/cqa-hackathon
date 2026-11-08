@@ -69,7 +69,13 @@ function renderImportErrors() {
   const errors = $("import-errors");
   errors.replaceChildren();
   errors.hidden = !workspace.importErrors?.length;
-  for (const error of workspace.importErrors || []) errors.append(node('p', error.conversation_id + ': ' + error.error));
+  for (const error of workspace.importErrors || []) {
+    const entry = node('div');
+    entry.append(node('p', error.conversation_id + ': новая оценка не создана.'));
+    const details = node('details');
+    details.append(node('summary', 'Подробности проверки'), node('p', error.error));
+    entry.append(details); errors.append(entry);
+  }
 }
 
 function node(tag, text, className) {

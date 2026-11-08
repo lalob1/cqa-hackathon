@@ -1,5 +1,21 @@
 # CQA Hackathon — agent and team handoff
 
+## Current integration: durable review workflow (2026-11-08)
+
+Use branch [`fix/dev-review-workflow`](https://github.com/lalob1/cqa-hackathon/tree/fix/dev-review-workflow). It includes the current team carousel through `d53c114`, merged with the supplied backend-only implementation and fixes. Earlier sections below describe previous checkpoints and should be read in that context.
+
+- Runs, original model judgments, rubric/transcript snapshots, appeals and append-only reviewer decisions are persisted in SQLite. The frontend uses the API for imports and reviews, restores server history and supports original/final critical, pending and open-appeal filters. Latest means last server insertion, selected before filtering.
+- Final V11 live workflow passed on a new synthetic dialogue: score 100, source evidence, saved appeal about the explanation, reviewer confirmation of N/A, recalculation at 100, and reload at revision 2. The original model text is retained separately. The 10-result final batch reimport created no duplicates; two failed attempts remain explicit errors and do not replace earlier successful results.
+- Stale writes return 409, refresh the server state and preserve an unsent draft for explicit resubmission. Duplicate imports retain the same run and decisions. A different conversation under an existing ID rejects the whole batch.
+- Default prompt is `cqa-rubric-v11-evidence-gates`. Full compact transcripts, constrained JSON, limited thinking and targeted repair of invalid criteria are retained. The evidence gate applies only to unchanged standard rules; it cannot prove all semantic claims. No conversation IDs or reference answers are embedded in production code.
+- The 12-case V11 calibration review has four chats per language and 96 provisional assistant reference judgments, frozen before opening V4 outputs. This is neither independent human Ground Truth nor a held-out test. New successful results: 10/12. Processing failures are kept separately, not assigned a numeric zero.
+- On the same 10 successful pairs, total MAE against that provisional reference is 8.371 (historical V4) versus 4.954 (V11). This is retrospective and changes multiple components; it does not isolate a causal prompt effect. See [DEV_REVIEW_SUMMARY.md](DEV_REVIEW_SUMMARY.md) for coverage, criterion counts and limitations.
+- All successful candidate explanations and citations were reviewed; exact V9 matches explicitly reuse the earlier review. Residual generic text, wrong N/A and unsupported reasons remain, especially in KZ. Matching scores must not be presented as proof that explanations are correct. Full transcripts, labels and the per-criterion semantic audit stay in the separate local DEV review package, outside Git.
+- 92 unittest tests passed; JavaScript syntax passed. Browser checks include real local inference, evidence, durable appeals/recalculation, changing the rubric, revision conflicts, duplicate/invalid/error imports and the merged 320/390 px layout. Detailed current checks are at the top of [UI_CHECKS.md](UI_CHECKS.md). Live inference uses llama.cpp; Ollama and physical phones were not tested here.
+- `results/dev/results.json` is the unchanged historical 65-record V4 export. No new PROD data were provided and no organizer submission was made. Do not present the 12-case review as a complete 65-record rescore.
+
+Run `python app.py`; configure the local provider using [WORKFLOW_UPDATE_RU.md](WORKFLOW_UPDATE_RU.md). The default SQLite path is `data/cqa.sqlite3` (`CQA_DB` overrides it). Thinking can take several minutes on this laptop; record quality and latency together. API details are in [API_FOR_FRONTEND.md](API_FOR_FRONTEND.md).
+
 Updated 2026-11-08 (Asia/Qyzylorda). This handoff covers the CQA Desk interface, model calibration, the DEV export, and control-run preparation for the Freedom Broker Data Challenge.
 
 ## Repository and access
