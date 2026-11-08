@@ -292,7 +292,7 @@
     if (document.body.dataset.view === "start") return;
     ctx.clearRect(0, 0, width, height);
     const view = scene();
-    opaqueRects = Array.from(document.querySelectorAll(".panel, .list-group"))
+    opaqueRects = Array.from(document.querySelectorAll(".panel, .list-group:not(#conversation-list)"))
       .filter(element => element.getClientRects().length)
       .map(element => element.getBoundingClientRect());
     const coins = [];

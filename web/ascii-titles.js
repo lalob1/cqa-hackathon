@@ -120,4 +120,3 @@
   window.addEventListener("resize", sync);
   sync();
 })();
-
