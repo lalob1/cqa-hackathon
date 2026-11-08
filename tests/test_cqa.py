@@ -178,6 +178,7 @@ class ChecklistTests(unittest.TestCase):
         answers = {**ANSWERS, "closing": "yes", "critical": "no"}
         judgments = {key: {"answer": str(value), "reason": "Проверено.", "evidence": [{"start": 1, "end": 2}, {"start": 2, "end": 3}]}
                      for key, value in answers.items()}
+        judgments['closing']['evidence'] = [{'start': 4, 'end': 4}]
         template = score_conversation(example, DEFAULT_RUBRIC, lambda *_: {"message": {"content": json.dumps(judgments)}})
         records = [{**example, "conversation_id": f"synthetic-{n:02d}"} for n in range(10)]
         checkpoint = {

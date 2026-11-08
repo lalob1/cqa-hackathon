@@ -726,7 +726,7 @@ async function boot() {
     busy = true;
     $("upload").disabled = $("upload-results").disabled = $("demo").disabled = true;
     renderResult();
-    status("Локальная модель анализирует диалог…");
+    status("Локальная модель анализирует диалог… Это может занять несколько минут.");
     let reveal = false;
     try {
       const result = await api("/api/score", {conversation: workspace.records[index], rubric: workspace.rubric});

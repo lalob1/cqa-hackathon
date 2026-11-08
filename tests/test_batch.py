@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 import batch
 import engine
+from fixture_runs import stored_prediction
 
 
 ANSWERS = dict(greeting="yes", needs="na", identity="na", consultation=15,
@@ -21,8 +22,7 @@ def result_for(conversation, answers=None):
     judgments = {key: {"answer": value, "reason": "Synthetic test judgment, not a model benchmark.",
                        "evidence": [{"start": 1, "end": len(conversation["transcript"])}]}
                  for key, value in (answers or ANSWERS).items()}
-    response = {"model": engine.model_name(), "message": {"content": json.dumps(judgments)}}
-    return engine.score_conversation(conversation, engine.DEFAULT_RUBRIC, chat=lambda *_: copy.deepcopy(response))
+    return stored_prediction(conversation, engine.DEFAULT_RUBRIC, judgments, engine.model_name())
 
 
 class BatchTests(unittest.TestCase):

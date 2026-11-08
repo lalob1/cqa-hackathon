@@ -84,6 +84,44 @@ class GroundingTests(unittest.TestCase):
                 rubric, judgment = self.criterion(key, answer, 3)
                 engine.validate_operator_evidence(judgment, rubric, self.conversation)
 
+    def test_closing_na_distinguishes_operator_closure_from_connection_loss(self):
+        rubric, judgment = self.criterion('closing', 'na', 3)
+        self.conversation['transcript'].append({'timestamp':'00:03', 'speaker':'system', 'text':'Connection to customer lost.'})
+        engine.validate_operator_evidence(judgment, rubric, self.conversation)
+        for text in ('Agent closed the chat.', 'Chat closed by operator.', 'Чат завершён оператором.', 'Оператор чатты аяқтады.'):
+            self.conversation['transcript'][-1]['text'] = text
+            with self.subTest(text=text), self.assertRaisesRegex(ValueError, 'explicitly chose to end'):
+                engine.validate_operator_evidence(judgment, rubric, self.conversation)
+        self.conversation['transcript'].pop()
+        for text in ('До свидания!', 'Сау болыңыз.', 'Bye, take care!'):
+            self.conversation['transcript'][2]['text'] = text
+            with self.subTest(text=text), self.assertRaisesRegex(ValueError, 'explicitly chose to end'):
+                engine.validate_operator_evidence(judgment, rubric, self.conversation)
+
+    def test_closing_positive_must_cite_the_farewell_and_not_only_earlier_solution(self):
+        rubric, judgment = self.criterion('closing', 'yes', 3)
+        with self.assertRaisesRegex(ValueError, 'no farewell'):
+            engine.validate_operator_evidence(judgment, rubric, self.conversation)
+
+    def test_explicit_private_paid_offer_is_not_a_negative_critical_flag(self):
+        rubric, judgment = self.criterion('critical', 'no', 3)
+        for text in ('I charge for private advice and can help after work.',
+                     'Я предлагаю вам платную консультацию в частном порядке.'):
+            self.conversation['transcript'][2]['text'] = text
+            with self.subTest(text=text), self.assertRaisesRegex(ValueError, 'paid private advice'):
+                engine.validate_operator_evidence(judgment, rubric, self.conversation)
+        for text in ('I do not charge for private advice.', 'Our company offers paid consultation.'):
+            self.conversation['transcript'][2]['text'] = text
+            engine.validate_operator_evidence(judgment, rubric, self.conversation)
+
+    def test_exact_scale_anchor_cannot_explain_a_different_numeric_answer(self):
+        rubric, judgment = self.criterion('consultation', 20, 3)
+        judgment['consultation']['reason'] = next(level['anchor'] for level in rubric[0]['levels'] if level['value'] == 15)
+        with self.assertRaisesRegex(ValueError, 'DIFFERENT numeric level'):
+            engine.validate_operator_evidence(judgment, rubric, self.conversation)
+        judgment['consultation']['answer'] = 15
+        engine.validate_operator_evidence(judgment, rubric, self.conversation)
+
     def test_confirmed_identity_must_precede_protected_disclosure(self):
         self.conversation['transcript'][2]['text'] = 'I can see your account has a withdrawal restriction.'
         confirmation = {'timestamp': '00:03', 'speaker': 'system', 'text': 'Identity verified.'}

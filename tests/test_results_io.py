@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import patch
 
 import engine
+from fixture_runs import stored_prediction
 from results_io import CANONICAL_IDS, OFFICIAL_RUBRIC_SHA256, make_submission, validate_runs
 
 ANSWERS = dict(greeting="yes", needs="na", identity="na", consultation=15,
@@ -28,11 +29,8 @@ def saved_run(record, rubric=None):
                   "reason": "Контролируемый тест, не результат реальной модели.",
                   "evidence": [{"start": 1, "end": max(2, first_operator)}, {"start": 2, "end": 2}]}
                  for item in rubric}
-    def mock_chat(*_):
-        return {"model": "unit-test-model", "message": {"content": json.dumps(judgments)},
-                "prompt_eval_count": 10, "eval_count": 10}
     with patch.dict("os.environ", {"CQA_PROVIDER": "ollama"}):
-        return engine.score_conversation(record, rubric, mock_chat)
+        return stored_prediction(record, rubric, judgments)
 
 
 class RunImportTests(unittest.TestCase):
