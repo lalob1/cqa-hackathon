@@ -13,46 +13,63 @@ const roleArtwork = {
 const answerText = (value) => ({yes: "Да", no: "Нет", na: "N/A"})[value] ?? String(value);
 const scoreText = (value) => value === null ? "—" : value.toFixed(2);
 let defaults, workspace, selected, historyIndex, busy = false;
-let listFilter = "all", statusTimer;
+let historySupported = false, syncing = false, statusTimer;
 const pendingReviews = new Set();
-let savedLatest = new Map();
 
-async function allSummaries(latest = true) {
+async function allSummaries() {
   const rows = [];
   for (let offset = 0; ; offset += 500) {
-    const page = await api(`/api/runs?latest=${latest}&limit=500&offset=${offset}`);
+    const page = await api(`/api/runs?latest=false&limit=500&offset=${offset}`);
     rows.push(...page.results);
-    if (rows.length >= page.total) return rows;
+    if (page.results.length < 500 || rows.length >= page.total) return rows;
   }
 }
 
-async function refreshSavedList() {
-  savedLatest = new Map((await allSummaries()).map(row => [row.conversation_id, row]));
-  renderList();
+function sameConversation(a, b) {
+  return a.language === b.language && a.channel === b.channel && a.audio_url === b.audio_url
+    && a.transcript.length === b.transcript.length
+    && a.transcript.every((turn, i) => {
+      const other = b.transcript[i];
+      return turn.timestamp === other.timestamp && turn.speaker === other.speaker && turn.text === other.text;
+    });
 }
 
-function replaceRun(run) {
-  let index = workspace.records.findIndex(c => c.conversation_id === run.conversation.conversation_id);
-  if (index < 0) { index = workspace.records.length; workspace.records.push(run.conversation); }
-  if (JSON.stringify(workspace.records[index].transcript) !== JSON.stringify(run.conversation.transcript)) {
-    throw new Error("Сохранённый запуск содержит другой транскрипт для этого ID.");
+function replaceRun(run, target = workspace) {
+  let index = target.records.findIndex(c => c.conversation_id === run.conversation.conversation_id);
+  if (index < 0) {
+    index = target.records.length;
+    target.records.push(run.conversation);
+  } else if (!sameConversation(target.records[index], run.conversation)) {
+    throw new Error("Сохранённый запуск содержит другой диалог с ID " + run.conversation.conversation_id + ".");
   }
-  const runs = workspace.runs[index] ??= [];
+  const runs = target.runs[index] ??= [];
   const prior = runs.findIndex(entry => entry.run_id === run.run_id);
-  if (prior >= 0) runs[prior] = run; else runs.push(run);
+  if (prior < 0) runs.push(run);
+  else if (runs[prior].revision <= run.revision) runs[prior] = run;
   return index;
 }
 
 async function restoreServerHistory() {
-  const summaries = await allSummaries(false);
+  const summaries = (await allSummaries()).reverse();
   const loaded = [];
-  for (const row of summaries.reverse()) loaded.push(await api('/api/runs/' + row.run_id));
-  // Server insertion order defines latest, independently of model clock timestamps.
-  for (const runs of Object.values(workspace.runs)) {
-    for (let n = runs.length - 1; n >= 0; n--) if (runs[n].run_id) runs.splice(n, 1);
+  for (let offset = 0; offset < summaries.length; offset += 6) {
+    const batch = summaries.slice(offset, offset + 6);
+    loaded.push(...await Promise.all(batch.map(row => api("/api/runs/" + row.run_id))));
   }
-  for (const run of loaded) replaceRun(run);
-  await refreshSavedList();
+  // Build a complete snapshot before replacing history. A failed fetch or
+  // conflicting dialogue leaves the existing browser data usable.
+  const snapshot = {
+    records: [...workspace.records],
+    runs: Object.fromEntries(Object.entries(workspace.runs).map(([index, runs]) =>
+      [index, runs.filter(run => !run.run_id)]))
+  };
+  for (const run of loaded) replaceRun(run, snapshot);
+  workspace.records = snapshot.records;
+  workspace.runs = snapshot.runs;
+}
+
+function finalScoreFor(run) {
+  return run.final_score ?? run.finalScore ?? run.original.score;
 }
 
 function criterionAppeals(run, id) {
@@ -69,13 +86,16 @@ function renderImportErrors() {
   const errors = $("import-errors");
   errors.replaceChildren();
   errors.hidden = !workspace.importErrors?.length;
-  for (const error of workspace.importErrors || []) {
-    const entry = node('div');
-    entry.append(node('p', error.conversation_id + ': новая оценка не создана.'));
-    const details = node('details');
-    details.append(node('summary', 'Подробности проверки'), node('p', error.error));
-    entry.append(details); errors.append(entry);
+  if (errors.hidden) return;
+  const details = node("details");
+  const list = node("ul");
+  for (const error of workspace.importErrors) {
+    const entry = node("li");
+    entry.append(node("strong", error.conversation_id), node("p", error.error));
+    list.append(entry);
   }
+  details.append(node("summary", "Ошибки импорта · " + workspace.importErrors.length), list);
+  errors.append(details);
 }
 
 function node(tag, text, className) {
@@ -96,11 +116,11 @@ function speakerBadge(speaker) {
   return badge;
 }
 
-function status(message, isError = false) {
+function status(message, isError = false, keep = false) {
   clearTimeout(statusTimer);
   $("status").textContent = message;
   $("status").dataset.error = String(isError);
-  if (!isError && !busy) statusTimer = setTimeout(() => { $("status").textContent = ""; }, 7000);
+  if (!isError && !keep) statusTimer = setTimeout(() => { $("status").textContent = ""; }, 7000);
 }
 
 async function api(path, body) {
@@ -108,12 +128,13 @@ async function api(path, body) {
     method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)
   };
   const response = await fetch(path, options);
-  const json = await response.json();
+  const json = await response.json().catch(() => null);
   if (!response.ok) {
-    const error = new Error(json.error || "Запрос не выполнен.");
+    const error = new Error(json?.error || "Запрос не выполнен (HTTP " + response.status + ").");
     error.status = response.status;
     throw error;
   }
+  if (json === null) throw new Error("Сервер вернул ответ в неожиданном формате.");
   return json;
 }
 
@@ -153,20 +174,22 @@ function showView(view, tab) {
 function openRecord(index) {
   selectRecord(index);
   const run = workspace.runs[index]?.[historyIndex];
-  const summary = savedLatest.get(workspace.records[index].conversation_id);
-  const critical = listFilter === "final-critical" ? summary?.final_critical_reasons : summary?.critical_reasons;
-  const criterion = listFilter === "appeal"
-    ? run?.appeals.find(a => a.status === "open")?.criterion_id
-    : critical?.[0]?.criterion_id;
+  const filter = $("list-filter").value;
+  let criterion;
+  if (run && filter === "appeal") {
+    criterion = run.original.rubric.find(item => criterionAppeals(run, item.id)
+      .some(appeal => appeal.status === "open"))?.id;
+  } else if (run && (filter === "critical" || filter === "final-critical")) {
+    const score = filter === "critical" ? run.original.score : finalScoreFor(run);
+    criterion = Object.keys(score.flags).find(id => score.flags[id]);
+  }
   showView("review", criterion ? "score" : "dialogue");
   if (criterion) {
     renderResult(criterion);
-    const evidence = listFilter === 'final-critical' ? critical?.[0]?.evidence?.[0]
-      : run.original.judgments[criterion]?.evidence[0];
-    if (evidence) showEvidence(evidence);
-    if (window.matchMedia('(max-width: 760px)').matches) setReviewTab('score');
+    $("score-title").focus({preventScroll: true});
+  } else {
+    $("transcript-title").focus({preventScroll: true});
   }
-  $("transcript-title").focus({preventScroll: true});
 }
 
 function selectRecord(index) {
@@ -178,13 +201,13 @@ function selectRecord(index) {
 }
 
 async function importPayload(payload, label, openView = true) {
-  if (busy) return;
+  if (busy || syncing) return;
   const records = await api("/api/import", {payload});
-  if (busy) return;
+  if (busy || syncing) return;
   const existing = new Map(workspace.records.map((record, index) => [record.conversation_id, index]));
   for (const record of records) {
     const index = existing.get(record.conversation_id);
-    if (index !== undefined && JSON.stringify(workspace.records[index]) !== JSON.stringify(record)) {
+    if (index !== undefined && !sameConversation(workspace.records[index], record)) {
       throw new Error("Этот ID уже загружен с другим содержимым: " + record.conversation_id);
     }
   }
@@ -192,29 +215,41 @@ async function importPayload(payload, label, openView = true) {
   const first = existing.get(records[0].conversation_id) ?? workspace.records.length;
   workspace.records.push(...additions);
   $("filter").value = "";
-  $("critical-only").checked = false;
-  listFilter = "all";
+  $("list-filter").value = "all";
   selectRecord(first);
-  if (openView) showView("dialogues");
-  persist(label + " · новых диалогов " + additions.length);
-}
-
-function runKey(audit) {
-  return JSON.stringify([audit.input_sha256, audit.rubric_sha256, audit.provider, audit.model, audit.prompt, audit.created_at]);
+  if (openView) {
+    showView("dialogues");
+    persist(label + " · новых диалогов " + additions.length);
+  } else cacheWorkspace();
 }
 
 async function importResults(payload) {
-  if (busy) return;
+  if (busy || syncing || pendingReviews.size) return;
   const known = new Set(Object.values(workspace.runs).flat().map(run => run.run_id));
-  const checked = await api("/api/import-results", {payload, records: workspace.records});
-  for (const id of checked.run_ids) replaceRun(await api('/api/runs/' + id));
-  await refreshSavedList();
-  if (selected !== undefined) selectRecord(selected);
-  workspace.importErrors = checked.errors;
-  renderImportErrors();
-  persist("Проверено оценок: " + checked.results.length + ". Новых запусков: "
-    + checked.run_ids.filter(id => !known.has(id)).length + ". Ошибок обработки: " + checked.errors.length);
-  showView('dialogues');
+  const ids = new Set([payload?.results, payload?.errors].flatMap(rows =>
+    Array.isArray(rows) ? rows.map(row => row?.conversation_id) : []));
+  const records = workspace.records.filter(record => ids.has(record.conversation_id));
+  if (!records.length && ids.size) throw new Error("Сначала загрузите диалоги для этого файла оценок.");
+  syncing = true;
+  try {
+    const checked = await api("/api/import-results", {payload, records: ids.size ? records : workspace.records});
+    workspace.importErrors = checked.errors;
+    renderImportErrors();
+    cacheWorkspace();
+    if (checked.run_ids.length) {
+      try { await restoreServerHistory(); }
+      catch (error) {
+        throw new Error("Оценки сохранены. Не удалось обновить историю: " + error.message + " Повторите обновление через меню ⋯.");
+      }
+    }
+    selectRecord(selected);
+    persist("Оценок в файле: " + checked.results.length + " · новых: "
+      + checked.run_ids.filter(id => !known.has(id)).length + " · ошибок: " + checked.errors.length);
+    showView("dialogues");
+  } finally {
+    syncing = false;
+    renderResult();
+  }
 }
 
 function handleUpload(id, importFile) {
@@ -245,20 +280,20 @@ function conversationIcon(channel) {
 function renderList() {
   const list = $("conversation-list");
   const search = $("filter").value.toLowerCase().trim();
+  const filter = $("list-filter").value;
   list.replaceChildren();
-  for (const button of document.querySelectorAll("[data-list-filter]")) {
-    button.setAttribute("aria-pressed", String(button.dataset.listFilter === listFilter));
-  }
   for (const [index, conversation] of workspace.records.entries()) {
     const run = workspace.runs[index]?.at(-1);
-    const latest = run?.original;
-    const saved = savedLatest.get(conversation.conversation_id);
-    const critical = saved?.original_critical || false;
     if (!(conversation.conversation_id + " " + conversation.language).toLowerCase().includes(search)) continue;
-    if (listFilter === "critical" && !critical) continue;
-    if (listFilter === "final-critical" && !saved?.final_critical) continue;
-    if (listFilter === "appeal" && !saved?.open_appeals) continue;
-    if (listFilter === "pending" && (saved || latest)) continue;
+    const final = run && finalScoreFor(run);
+    const originalCritical = run && Object.values(run.original.score.flags).some(Boolean);
+    const finalCritical = final && Object.values(final.flags).some(Boolean);
+    const openAppeals = run ? run.original.rubric.reduce((count, item) => count
+      + criterionAppeals(run, item.id).filter(appeal => appeal.status === "open").length, 0) : 0;
+    if (filter === "critical" && !originalCritical) continue;
+    if (filter === "final-critical" && !finalCritical) continue;
+    if (filter === "appeal" && !openAppeals) continue;
+    if (filter === "pending" && run) continue;
     const button = node("button", undefined, "record paper-record");
     button.type = "button";
     button.dataset.recordIndex = String(index);
@@ -268,11 +303,14 @@ function renderList() {
     copy.append(node("span", conversation.conversation_id, "record-title"),
       node("span", preview, "record-preview"),
       node("span", conversation.language, "record-meta"));
-    const end = node("span", undefined, "record-end" + (critical ? " attention" : ""));
-    if (latest) {
-      end.append(node("span", scoreText(saved ? saved.final_score : (run.final_score || run.finalScore || latest.score).total), "record-score"));
-      if (critical) end.append(node("span", saved.final_critical ? "Грубая ошибка ИИ" : "Флаг ИИ снят", "record-state attention"));
-      if (saved?.open_appeals) end.append(node('span', 'Апелляций: ' + saved.open_appeals, 'record-state'));
+    const end = node("span", undefined, "record-end");
+    if (run) {
+      end.append(node("span", scoreText(final.total), "record-score"));
+      const flags = node("span", undefined, "record-flags");
+      if (finalCritical) flags.append(node("span", originalCritical ? "Грубая ошибка ИИ" : "Ошибка после пересмотра", "record-state attention"));
+      else if (originalCritical) flags.append(node("span", "Флаг ИИ снят", "record-state"));
+      if (openAppeals) flags.append(node("span", "Апелляций: " + openAppeals, "record-state appeal-state"));
+      if (flags.childElementCount) copy.append(flags);
     } else {
       end.append(node("span", undefined, "record-chevron"));
     }
@@ -388,7 +426,7 @@ function reviewForm(run, item, prior, current) {
     event.preventDefault();
     const message = reason.value.trim();
     if (!message) return status("Добавьте комментарий.", true);
-    if (pendingReviews.has(run.run_id)) return;
+    if (syncing || pendingReviews.has(run.run_id)) return;
     pendingReviews.add(run.run_id); button.disabled = true;
     try {
       const body = prior
@@ -398,15 +436,20 @@ function reviewForm(run, item, prior, current) {
       replaceRun(updated); delete workspace.drafts[key];
       const conflict = workspace.conflictDrafts?.[run.run_id];
       if (conflict?.criterion_id === item.id && conflict.message === message) delete workspace.conflictDrafts[run.run_id];
-      await refreshSavedList();
       persist(prior ? "Решение сохранено на сервере. Итог пересчитан." : "Апелляция сохранена на сервере.");
-      renderResult(item.id);
+      renderList();
+      if (workspace.runs[selected]?.[historyIndex]?.run_id === run.run_id) renderResult(item.id);
     } catch (error) {
       if (error.status === 409) {
         workspace.conflictDrafts ??= {};
         workspace.conflictDrafts[run.run_id] = {criterion_id: item.id, message, answer: prior ? JSON.parse(answer.value) : null};
         cacheWorkspace();
-        try { replaceRun(await api('/api/runs/' + run.run_id)); await refreshSavedList(); renderResult(item.id); }
+        try {
+          replaceRun(await api("/api/runs/" + run.run_id));
+          cacheWorkspace();
+          renderList();
+          if (workspace.runs[selected]?.[historyIndex]?.run_id === run.run_id) renderResult(item.id);
+        }
         catch (refreshError) { status(refreshError.message, true); return; }
         status("Запуск изменён в другой вкладке. Данные обновлены, черновик сохранён. Сверьте решение перед повторным сохранением.", true);
       } else status(error.message, true);
@@ -426,45 +469,56 @@ function renderCriterion(run, item, finalScore, opened) {
   const summary = node("summary");
   const tone = item.type === "flag" ? (current === "yes" ? "fail" : "skip")
     : {yes: "pass", no: "fail", na: "skip"}[current] ?? "number";
-  summary.append(node("span", item.title, "criterion-title"), node("span", answerText(current), "answer " + tone));
+  summary.append(node("span", item.title, "criterion-title"));
+  if (appeal) summary.append(node("span", "Апелляция", "criterion-appeal"));
+  summary.append(node("span", answerText(current), "answer " + tone));
   row.append(summary);
   const points = finalScore.criteria[item.id];
   const weight = item.type === "flag" ? "Отдельный флаг" :
     "Вес " + item.weight + " · начислено " + scoreText(points.points) + " из " + scoreText(points.effective_weight);
-  row.append(node("p", weight, "meta"), node("p", "Объяснение ИИ: " + original.reason));
-  row.append(node("p", "Исходная оценка ИИ: " + answerText(original.answer), "meta"));
-  row.append(node('p', 'Реплики исходной оценки ИИ:', 'meta'));
+  const detail = node("div", undefined, "criterion-body");
+  detail.append(node("p", weight, "meta"), node("p", original.reason, "criterion-reason"));
+  detail.append(node("p", "Ответ ИИ: " + answerText(original.answer), "meta"));
+  const evidence = node("div", undefined, "evidence-links");
+  evidence.setAttribute("role", "group");
+  evidence.setAttribute("aria-label", "Реплики исходной оценки ИИ");
   for (const span of original.evidence) {
     const link = node("a", "#" + span.start + (span.end === span.start ? "" : "–" + span.end), "evidence");
     link.href = "#message-" + span.start;
     link.addEventListener("click", (event) => { event.preventDefault(); showEvidence(span); });
-    row.append(link);
+    evidence.append(link);
   }
-  if (appeals.length) row.append(node('h4', 'История апелляций'));
-  for (const entry of appeals) {
-    row.append(node('p', 'Апелляция: ' + entry.message));
-    if (entry.decision) row.append(node('p', 'Решение проверяющего: ' + answerText(entry.decision.answer) + ' · ' + entry.decision.reason));
-    else row.append(node('p', 'Открыта · ' + (entry.opened_at || ''), 'meta'));
+  detail.append(evidence);
+  if (appeals.length) {
+    const history = node("div", undefined, "appeal-history");
+    history.append(node("h4", "История апелляций"));
+    for (const entry of appeals) {
+      history.append(node("p", entry.message));
+      if (entry.decision) history.append(node("p", "Решение: " + answerText(entry.decision.answer) + " · " + entry.decision.reason, "meta"));
+      else history.append(node("p", "Открыта", "meta"));
+    }
+    detail.append(history);
   }
-  if (run.run_id) {
+  if (run.run_id && historySupported) {
     const panel = node('details', undefined, 'appeal-panel'); panel.open = Boolean(appeal);
     panel.append(node('summary', appeal ? 'Рассмотреть апелляцию' : (appeals.length ? 'Подать новую апелляцию' : 'Оспорить оценку')),
-      reviewForm(run, item, appeal, current)); row.append(panel);
-  } else row.append(node('p', 'Локальная история браузера. Сохраните запуск на сервере для пересмотра.', 'meta'));
+      reviewForm(run, item, appeal, current)); detail.append(panel);
+  }
+  row.append(detail);
   return row;
 }
 
 function renderResult(openCriterion, reveal = false) {
   const runs = workspace.runs[selected] || [];
   const run = runs[historyIndex];
-  $("score").disabled = busy || !workspace.records[selected];
-  $("score").textContent = busy ? "Оценка выполняется…" : "Оценить диалог";
+  $("score").disabled = !historySupported || busy || syncing || !workspace.records[selected];
+  $("score").textContent = busy ? "Оценка выполняется…" : run ? "Новая оценка" : "Оценить диалог";
   $("score").classList.toggle("is-scoring", busy);
   $("history-label").hidden = runs.length < 2;
   $("history").replaceChildren();
   for (const [index, entry] of runs.entries()) {
-    const time = new Date(entry.original.audit.created_at).toLocaleTimeString("ru");
-    const option = node("option", String(index + 1) + " · " + time);
+    const time = new Date(entry.original.audit.created_at).toLocaleString("ru", {dateStyle: "short", timeStyle: "short"});
+    const option = node("option", time + " · " + scoreText(finalScoreFor(entry).total) + (entry.run_id ? "" : " · локально"));
     option.value = index;
     option.selected = index === historyIndex;
     $("history").append(option);
@@ -478,7 +532,7 @@ function renderResult(openCriterion, reveal = false) {
     return;
   }
   const original = run.original;
-  const final = run.final_score || run.finalScore || original.score;
+  const final = finalScoreFor(run);
   const conflict = workspace.conflictDrafts?.[run.run_id];
   if (conflict) {
     const draft = node('aside', undefined, 'conflict-draft');
@@ -522,12 +576,14 @@ function renderResult(openCriterion, reveal = false) {
       : ' · прежний запуск без снимка настроек'), 'meta'));
   if (original.audit.repair_criteria?.length) info.append(node('p', 'Повторно проверены критерии: ' + original.audit.repair_criteria.join(', '), 'meta'));
   pane.append(info);
-  if (!run.run_id) {
+  if (!run.run_id && historySupported) {
+    const conversation = workspace.records[selected];
     const migrate = node('button', 'Сохранить запуск на сервере', 'primary');
     migrate.addEventListener('click', async () => {
+      if (syncing || busy || pendingReviews.size) return;
+      syncing = true;
       migrate.disabled = true;
       try {
-        const conversation = workspace.records[selected];
         const imported = await api('/api/import-results', {records: [conversation], payload: {results: [original], errors: []}});
         let restored = await api('/api/runs/' + imported.run_ids[0]);
         // Keep the exact local snapshot, including its original client timestamps.
@@ -545,12 +601,20 @@ function renderResult(openCriterion, reveal = false) {
               answer: old.decision.answer, reason: old.decision.reason, reviewer: 'Импорт истории браузера', expected_revision: restored.revision});
           }
         }
-        const runs = workspace.runs[selected]; const position = runs.indexOf(run);
+        await restoreServerHistory();
+        const index = workspace.records.indexOf(conversation);
+        const runs = workspace.runs[index];
+        const position = runs.indexOf(run);
         if (position >= 0) runs.splice(position, 1);
-        replaceRun(restored); await refreshSavedList(); selectRecord(selected);
+        selectRecord(selected);
+        if (index === selected) historyIndex = runs.findIndex(entry => entry.run_id === restored.run_id);
         persist('История перенесена на сервер. Исходные даты браузера сохранены в резервной копии.');
       } catch (error) { status(error.message, true); }
-      finally { migrate.disabled = false; }
+      finally {
+        syncing = false;
+        migrate.disabled = false;
+        renderResult();
+      }
     });
     pane.append(migrate);
   }
@@ -637,11 +701,23 @@ function readEditor() {
 async function boot() {
   const config = await api("/api/config");
   defaults = config.rubric;
-  $("model").textContent = config.model + " · доступность не проверена";
+  historySupported = Boolean(config.features?.includes("run_history"));
+  $("model").textContent = config.model;
+  $("model-badge").title = "Настроенная модель: " + config.model + " · доступность не проверена";
+  $("refresh-runs").disabled = $("upload-results").disabled = !historySupported;
   try { workspace = JSON.parse(localStorage.getItem(storageKey)); } catch { workspace = null; }
   workspace ??= {rubric: defaults, records: [], runs: {}};
   renderImportErrors();
-  await restoreServerHistory();
+  if (historySupported) {
+    try {
+      await restoreServerHistory();
+      cacheWorkspace();
+    } catch (error) {
+      status("История недоступна. " + error.message + " Обновите её через меню ⋯.", true);
+    }
+  } else {
+    status("Запустите обновлённый сервер для сохранения оценок и апелляций.", true);
+  }
   fillEditor(workspace.rubric);
   selectRecord(0);
   if (!workspace.records.length) await importPayload(await api("/synthetic.json"), "Синтетические примеры загружены", false);
@@ -666,24 +742,26 @@ async function boot() {
       {opacity: .95, transform: "translateY(2px) scale(1)", filter: "blur(.5px)", offset: .65},
       {opacity: 1, transform: "none", filter: "blur(0)"}
     ], {duration: 540, easing: "cubic-bezier(.18,.8,.2,1)"});
-    $("filter").focus({preventScroll: true});
+    document.querySelector(".paper-record.is-current")?.focus({preventScroll: true});
   });
-  $('refresh-runs').addEventListener('click', async () => {
-    try { await restoreServerHistory(); selectRecord(selected); persist('История обновлена с сервера.'); }
-    catch (error) { status(error.message, true); }
+  $("refresh-runs").addEventListener("click", async () => {
+    if (syncing || busy || pendingReviews.size) return;
+    syncing = true;
+    $("refresh-runs").disabled = true;
+    $("score").disabled = true;
+    try {
+      await restoreServerHistory();
+      selectRecord(selected);
+      persist("История обновлена с сервера.");
+    } catch (error) { status(error.message, true); }
+    finally {
+      syncing = false;
+      $("refresh-runs").disabled = false;
+      renderResult();
+    }
   });
   $("filter").addEventListener("input", renderList);
-  $("critical-only").addEventListener("change", () => {
-    listFilter = $("critical-only").checked ? "critical" : "all";
-    renderList();
-  });
-  for (const button of document.querySelectorAll("[data-list-filter]")) {
-    button.addEventListener("click", () => {
-      listFilter = button.dataset.listFilter;
-      $("critical-only").checked = false;
-      renderList();
-    });
-  }
+  $("list-filter").addEventListener("change", renderList);
   for (const button of document.querySelectorAll(".app-nav [data-view]")) {
     button.addEventListener("click", () => showView(button.dataset.view,
       button.dataset.view === "review" ? "score" : undefined));
@@ -693,7 +771,7 @@ async function boot() {
   }
   $("back-to-list").addEventListener("click", () => {
     showView("dialogues");
-    document.querySelector('[data-record-index="' + selected + '"]')?.focus({preventScroll: true});
+    (document.querySelector(".paper-record.is-current") || $("list-filter")).focus({preventScroll: true});
   });
   document.addEventListener("click", event => {
     const menu = document.querySelector(".import-menu");
@@ -727,23 +805,27 @@ async function boot() {
     } catch (error) { status(error.message, true); }
   });
   $("score").addEventListener("click", async () => {
-    if (busy || !workspace.records[selected]) return;
+    if (!historySupported || busy || syncing || !workspace.records[selected]) return;
     const index = selected;
     busy = true;
     $("upload").disabled = $("upload-results").disabled = $("demo").disabled = true;
     renderResult();
-    status("Локальная модель анализирует диалог… Это может занять несколько минут.");
+    status("Модель анализирует диалог. Это может занять несколько минут.", false, true);
     let reveal = false;
     try {
       const result = await api("/api/score", {conversation: workspace.records[index], rubric: workspace.rubric});
-      const runs = workspace.runs[index] ??= [];
-      const stored = await api('/api/runs/' + result.run_id);
+      let stored;
+      try { stored = await api("/api/runs/" + result.run_id); }
+      catch (error) {
+        throw new Error("Оценка сохранена. Не удалось загрузить результат: " + error.message + " Обновите историю через меню ⋯.");
+      }
       replaceRun(stored);
-      await refreshSavedList();
-      if (index === selected) historyIndex = runs.length - 1;
+      if (index === selected) historyIndex = workspace.runs[index].findIndex(run => run.run_id === stored.run_id);
       reveal = index === selected;
       persist("Оценка сохранена на сервере.");
-      $("model").textContent = result.audit.model + " · последний запрос выполнен";
+      $("model").textContent = result.audit.model;
+      $("model-badge").title = "Последний запрос выполнен: " + result.audit.model;
+      $("model-badge").classList.add("is-ready");
     } catch (error) { status(error.message, true); }
     finally {
       busy = false;
@@ -754,4 +836,4 @@ async function boot() {
   });
 }
 
-boot().catch((error) => status(error.message, true));
+boot().catch(error => status("Не удалось открыть приложение. " + error.message + " Перезагрузите страницу.", true));

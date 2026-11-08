@@ -20,7 +20,7 @@ Updated 2026-11-08 (Asia/Qyzylorda). This handoff covers the CQA Desk interface,
 
 ## Repository and access
 
-- Team repository [lalob1/cqa-hackathon](https://github.com/lalob1/cqa-hackathon), private while the team builds. GitHub lists `toxxxapts`, `zhaziiaa14`, and `Ain-gl` as active collaborators. For the integrated preview, use `model/compact-transcripts` in [PR #3](https://github.com/lalob1/cqa-hackathon/pull/3). It builds on [calibration PR #1](https://github.com/lalob1/cqa-hackathon/pull/1) and [control-readiness PR #2](https://github.com/lalob1/cqa-hackathon/pull/2).
+- Team repository [lalob1/cqa-hackathon](https://github.com/lalob1/cqa-hackathon), private while the team builds. GitHub lists `toxxxapts`, `zhaziiaa14`, and `Ain-gl` as active collaborators. Use `fix/dev-review-workflow` for the current integrated frontend and SQLite backend. The earlier [PR #3](https://github.com/lalob1/cqa-hackathon/pull/3) tracks the preceding UI and model work.
 - Work in short branches, for example `eval/dev-labels`, `model/rubric-calibration`, `ui/review`, and `ops/demo`. Keep branches independent by using the interfaces in the table below. Open PRs into `main`.
 - The guide calls for a public repository URL for the submission. The team still needs to decide when to publish and submit it. Confirm the organizer’s current cutoff and submission channel.
 - Local checkout on the original Windows machine is `C:/Users/lolol/Documents/Codex/2026-11-07/50-ai-10-ground-truth-1/work/cqa-hackathon`. Collaborators should clone GitHub.
@@ -144,6 +144,10 @@ The selected navigation background is one persistent `.nav-selection` element be
 The dialogue list, search field and filter chips now have blue liquid-glass styling: translucent gradient surfaces, frosted backdrop blur, luminous edge highlights and restrained inset reflections. The list uses a 20 px blur and 135% saturation. CSS provides opaque fallbacks where backdrop filters are unavailable. The transparent dialogue list is excluded from opaque-card coin culling, so the moving F and coins remain visible through its glass.
 
 Chrome observed the same bubble element at intermediate positions on all three routes, verified rapid retargeting and keyboard activation, checked programmatic navigation from a dialogue row, and confirmed final alignment at 320, 390, 680, 681, 768, 1024 and 1440 px. The two breakpoint sides were included because navigation moves from the header to the bottom bar. Search still filtered by language. There were no JavaScript errors or horizontal overflows. Desktop, mobile and checklist/review previews were refreshed.
+
+## Frontend after the SQLite update
+
+The compact toolbar combines search, one five-option review filter, and the import controls. The paper carousel and icon navigation remain. Cards and detail pages read the same latest saved run, with separate original and final flags. Reimporting an older score preserves server history order. An unavailable history endpoint leaves the cached workspace accessible, reports the error on startup, and supports a retry through the menu. The normal preview at `http://127.0.0.1:18770/` was restarted against the new API. See [UI_CHECKS.md](UI_CHECKS.md) for current verification.
 
 ## Verification and limits
 

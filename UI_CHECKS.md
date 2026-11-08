@@ -79,3 +79,9 @@ The previous grouped layout is saved at `checkpoint/blue-glass-polish-2026-11-08
 Chrome verified wheel browsing, arrow/Home/End navigation, mouse drag with release-click suppression, direct center/side paper opening, return selection, reflection cleanup, language/empty/pending/critical filters, and validated synthetic transcript/result import. The imported 93.75 score remained unchanged on paper and detail; eight criteria and evidence jumps worked. A 78-record synthetic collection reached its final record, with at most seven papers/dots visible and one tabbable paper. All three views and the shared nav indicator fit 320, 390, 680, 681, 900, 1024 and 1440 px. No horizontal overflow or JavaScript errors occurred; no live inference was requested.
 
 Native Chrome touch emulation also changed sample-ru to sample-kz without opening details. The touch implicit-capture transfer was fixed and retested. All three main-nav labels have 1 px clipped boxes while retaining their exact accessible button names. Desktop and phone previews show icon-only navigation.
+
+## Frontend on the durable review backend
+
+All 92 Python tests passed. Chrome checked the three views from 320 to 1440 px, reviewed desktop and phone layouts, and verified the normal preview entry after the backend restart. Synthetic workflow checks covered reimporting an older run, all five filters, evidence navigation, an appeal and saved decision, a 409 revision conflict with draft retention, errors-only import, legacy migration and backup, reload, and continued access to cached results when history returned HTTP 503. Original AI flags remained intact after the reviewer cleared a final flag.
+
+A simulated 502 kept the existing score intact and re-enabled retry. A fresh synthetic Qwen run exceeded the five-minute browser observation window. Live model completion was not established in that check.

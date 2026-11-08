@@ -26,7 +26,7 @@
         <span class="sr-only">Democrats</span>
       </a>
       <div class="masthead-context">
-        <span class="model" aria-label="Настроенная модель"><span class="dot"></span><span id="model">Локальная модель</span></span>
+        <span class="model" id="model-badge" title="Настроенная модель"><span class="dot" aria-hidden="true"></span><span id="model">Локальная модель</span></span>
       </div>
     </div>
   </header>
@@ -65,15 +65,18 @@
         <label class="search-field">
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.7" stroke="currentColor" stroke-width="1.7"/><path d="m16 16 4 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
           <span class="sr-only">Поиск по ID или языку</span>
-          <input type="search" id="filter" placeholder="Поиск по ID или языку">
+          <input type="search" id="filter" placeholder="ID или язык">
         </label>
-        <div class="list-filters" aria-label="Фильтр диалогов">
-          <button type="button" data-list-filter="all" aria-pressed="true">Все</button>
-          <button type="button" data-list-filter="pending" aria-pressed="false">Без оценки</button>
-          <button type="button" data-list-filter="final-critical" aria-pressed="false">Грубые после пересмотра</button>
-          <button type="button" data-list-filter="appeal" aria-pressed="false">Открытые апелляции</button>
-          <label class="filter-chip"><input type="checkbox" id="critical-only" class="sr-only">Грубые ошибки ИИ</label>
-        </div>
+        <label class="filter-control">
+          <span class="sr-only">Фильтр диалогов по последней оценке</span>
+          <select id="list-filter">
+            <option value="all">Все диалоги</option>
+            <option value="pending">Без оценки</option>
+            <option value="critical">Грубые ошибки ИИ</option>
+            <option value="final-critical">Грубые после пересмотра</option>
+            <option value="appeal">Открытые апелляции</option>
+          </select>
+        </label>
         <div class="actions">
           <label class="button upload primary icon-button" title="Загрузить диалоги">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 16V4m-4 4 4-4 4 4M5 15v5h14v-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -89,7 +92,6 @@
           </details>
         </div>
       </header>
-      <p class="meta">Фильтры оценок используют последний сохранённый запуск каждого диалога.</p>
       <div id="import-errors" role="alert" hidden></div>
       <div class="dialogue-carousel">
         <div id="conversation-list" class="dialogue-deck" role="group" aria-roledescription="карусель" aria-label="Карточки диалогов" aria-description="Листайте колёсиком, свайпом или стрелками клавиатуры. Нажмите на карточку, чтобы открыть диалог."></div>
@@ -126,7 +128,7 @@
         <section class="panel result" aria-labelledby="score-title">
           <header class="quality-heading">
             <span class="role-icon quality-icon" aria-hidden="true"><svg viewBox="0 0 28 28" fill="none"><rect x="6" y="5.5" width="16" height="17" rx="3" stroke="currentColor" stroke-width="1.55"/><path d="M10 5.5V4h8v1.5M10 11h8" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" opacity=".72"/><path class="quality-check" d="m10 16 2.8 2.8 5.2-5.4" pathLength="100" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-            <h2 id="score-title" data-verse>Оценка качества</h2>
+            <h2 id="score-title" data-verse tabindex="-1">Оценка качества</h2>
           </header>
           <div class="actions scoring-actions"><button type="button" id="score" class="primary" disabled>Оценить диалог</button><label id="history-label" hidden>История <select id="history"></select></label></div>
           <div id="results"></div>

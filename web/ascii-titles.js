@@ -8,22 +8,18 @@
 
   function buildMask(title) {
     const size = 112;
-    const split = title.hero && title.width < 450;
-    const lines = split ? title.label.split(/\s+/) : [title.label];
     const source = document.createElement("canvas");
     let ink = source.getContext("2d", {willReadFrequently: true});
     const font = "850 " + size + "px Segoe UI, sans-serif";
     ink.font = font;
-    const metrics = lines.map(line => ink.measureText(line));
-    const ascent = Math.max(...metrics.map(row => row.actualBoundingBoxAscent));
-    const descent = Math.max(...metrics.map(row => row.actualBoundingBoxDescent));
-    const lineHeight = size * 1.10;
-    source.width = Math.ceil(Math.max(...metrics.map(row => row.width)) + 20);
-    source.height = Math.ceil(ascent + descent + 18 + (lines.length - 1) * lineHeight);
+    const metrics = ink.measureText(title.label);
+    const ascent = metrics.actualBoundingBoxAscent;
+    source.width = Math.ceil(metrics.width + 20);
+    source.height = Math.ceil(ascent + metrics.actualBoundingBoxDescent + 18);
     ink = source.getContext("2d", {willReadFrequently: true});
     ink.font = font;
     ink.fillStyle = "#fff";
-    lines.forEach((line, index) => ink.fillText(line, 8, 8 + ascent + index * lineHeight));
+    ink.fillText(title.label, 8, 8 + ascent);
     const mask = ink.getImageData(0, 0, source.width, source.height).data;
     title.points = [];
     for (let y = 3; y < source.height; y += 5) {
@@ -88,7 +84,7 @@
     const context = canvas?.getContext("2d");
     if (!context) continue;
     const title = {element, canvas, context, label: element.dataset.asciiTitle,
-      hero: element.classList.contains("ascii-title-hero"), width: 0, height: 0,
+      width: 0, height: 0,
       points: [], scale: 1, visible: false, enteredAt: 0, hoverUntil: -1, pointerX: 0};
     titles.push(title);
     element.addEventListener("pointermove", event => {
