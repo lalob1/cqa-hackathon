@@ -333,7 +333,7 @@
   function pulse() { pulseAt = elapsed; }
 
   function beginDrag(event) {
-    if (event.button !== 0) return;
+    if (event.button !== 0 || stage.inert) return;
     drag = {id: event.pointerId, x: event.clientX, y: event.clientY,
       startX: event.clientX, startY: event.clientY};
     wasDragged = false;
@@ -364,7 +364,7 @@
   stage.addEventListener("lostpointercapture", () => { drag = null; });
   stage.addEventListener("click", event => { if (!wasDragged || event.detail === 0) pulse(); });
   window.addEventListener("click", event => {
-    if (event.target.closest("button, a, input, textarea, select, label, summary, .workspace, .editor, .library")) return;
+    if (event.target.closest("button, a, input, textarea, select, label, summary, .workspace, .editor, .library, .workspace-sidebar, .sidebar-scrim")) return;
     pulse();
   });
   window.addEventListener("blur", () => { drag = null; aimX = 0; aimY = 0; });

@@ -154,6 +154,56 @@ function setReviewTab(tab) {
   }
 }
 
+function setupNavigationDrawer() {
+  const compact = matchMedia("(max-width: 900px)");
+  const sidebar = $("workspace-sidebar");
+  const toggle = $("sidebar-toggle");
+  const close = $("sidebar-close");
+  const links = sidebar.querySelectorAll(".app-nav button");
+  const background = [document.querySelector(".masthead"), document.querySelector("main"), $("orbit-stage")];
+
+  function setOpen(open) {
+    const wasOpen = document.body.hasAttribute("data-drawer-open");
+    document.body.toggleAttribute("data-drawer-open", open);
+    toggle.setAttribute("aria-expanded", String(open));
+    sidebar.inert = compact.matches && !open;
+    for (const element of background) element.inert = open;
+    if (open) {
+      sidebar.setAttribute("role", "dialog");
+      sidebar.setAttribute("aria-modal", "true");
+      (sidebar.querySelector('[aria-current="page"]') || close).focus();
+    } else {
+      sidebar.removeAttribute("role");
+      sidebar.removeAttribute("aria-modal");
+      if (wasOpen) {
+        const target = compact.matches ? toggle : sidebar.querySelector('[aria-current="page"]');
+        target?.focus({preventScroll: true});
+      }
+    }
+  }
+
+  toggle.addEventListener("click", () => setOpen(true));
+  close.addEventListener("click", () => setOpen(false));
+  $("sidebar-scrim").addEventListener("click", () => setOpen(false));
+  compact.addEventListener("change", () => setOpen(false));
+  document.addEventListener("cqa:view-change", () => setOpen(false));
+  document.addEventListener("keydown", event => {
+    if (!document.body.hasAttribute("data-drawer-open")) return;
+    const last = links[links.length - 1];
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setOpen(false);
+    } else if (event.key === "Tab" && event.shiftKey && document.activeElement === close) {
+      event.preventDefault();
+      last.focus();
+    } else if (event.key === "Tab" && !event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      close.focus();
+    }
+  });
+  setOpen(false);
+}
+
 function showView(view, tab) {
   $("start-view").hidden = view !== "start";
   $("dialogues-view").hidden = view !== "dialogues";
@@ -782,6 +832,7 @@ async function boot() {
   });
   $("filter").addEventListener("input", renderList);
   $("list-filter").addEventListener("change", renderList);
+  setupNavigationDrawer();
   for (const button of document.querySelectorAll(".app-nav [data-view]")) {
     button.addEventListener("click", () => showView(button.dataset.view,
       button.dataset.view === "review" ? "score" : undefined));

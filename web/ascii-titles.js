@@ -22,15 +22,29 @@
     ink.fillText(title.label, 8, 8 + ascent);
     const mask = ink.getImageData(0, 0, source.width, source.height).data;
     title.points = [];
+    let minX = source.width, minY = source.height, maxX = 0, maxY = 0;
     for (let y = 3; y < source.height; y += 5) {
       for (let x = 3; x < source.width; x += 5) {
         const alpha = mask[(y * source.width + x) * 4 + 3];
-        if (alpha > 95) title.points.push({x, y, seed: title.points.length});
+        if (alpha <= 95) continue;
+        title.points.push({x, y, seed: title.points.length});
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x);
+        maxY = Math.max(maxY, y);
       }
     }
     title.sourceWidth = source.width;
-    title.sourceHeight = source.height;
-    title.scale = Math.min((title.width - 4) / source.width, (title.height - 10) / source.height);
+    if (title.centered && maxX > minX && maxY > minY) {
+      // Center the visible glyphs inside the capsule, accounting for font metrics.
+      title.scale = Math.min((title.width - 8) / (maxX - minX), (title.height - 8) / (maxY - minY));
+      title.left = (title.width - (minX + maxX) * title.scale) / 2;
+      title.top = (title.height - (minY + maxY) * title.scale) / 2;
+    } else {
+      title.scale = Math.min((title.width - 4) / source.width, (title.height - 10) / source.height);
+      title.left = 2;
+      title.top = (title.height - source.height * title.scale) / 2 - 2;
+    }
   }
 
   function measure(title) {
@@ -57,9 +71,7 @@
   function draw(title) {
     const ctx = title.context;
     ctx.clearRect(0, 0, title.width, title.height);
-    const scale = title.scale;
-    const left = title.centered ? (title.width - title.sourceWidth * scale) / 2 : 2;
-    const top = (title.height - title.sourceHeight * scale) / 2 - 2;
+    const {scale, left, top} = title;
     const tick = Math.floor(elapsed * 5);
     const entrance = Math.min(1, Math.max(0, (elapsed - title.enteredAt) / .65));
     const hover = title.hoverUntil > elapsed;
