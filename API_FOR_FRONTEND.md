@@ -14,6 +14,8 @@
 
 Объекты заполнить реальными репликами и текущим чек-листом; пустые массивы не являются допустимым запросом. Ответ, как раньше, содержит `conversation_id`, `judgments`, `score`, `rubric`, `audit`; теперь также `run_id`. После успеха сохранять `run_id` вместе с отображаемым результатом. Сохранение на сервере выполняется автоматически. Ошибку 502 не заменять демо-баллами.
 
+Если после повтора часть критериев осталась без допустимого ответа, сервер сохраняет запуск со статусом `needs_review` и возвращает HTTP 200. Поле `judgments` содержит принятые ответы, `criterion_errors` содержит причины по остальным критериям. В `score` и `final_score` итог равен `null`, а флаги по принятым критериям доступны в `flags`. По принятым ответам доступны апелляции. В пакетном импорте такой запуск передаётся в `results`; конкурсный экспорт помечает его как ошибку с пустым баллом.
+
 `GET /api/runs/RUN_ID` возвращает:
 
 ```json
@@ -38,12 +40,13 @@ GET /api/runs?filter=all&limit=100&offset=0
 GET /api/runs?filter=critical
 GET /api/runs?filter=final-critical
 GET /api/runs?filter=appeal
+GET /api/runs?filter=needs-review
 GET /api/runs?conversation_id=ID&latest=false
 ```
 
 `conversation_id` URL-кодировать. `latest=true` по умолчанию выбирает последний сохранённый запуск каждого ID **до применения фильтра**. `latest=false` показывает все запуски. Ответ: `total`, `offset`, `limit` и `results`; `limit` 1–500, следующая страница через `offset`.
 
-Карточка списка содержит `run_id`, `conversation_id`, `language`, `channel`, `original_score`, `final_score`, `original_critical`, `final_critical`, `open_appeals`, `revision`, `rubric_sha256`, `stored_at`.
+Карточка списка содержит `run_id`, `conversation_id`, `language`, `channel`, `status` (`complete` или `needs_review`), `original_score`, `final_score`, `original_critical`, `final_critical`, `open_appeals`, `revision`, `rubric_sha256`, `stored_at`.
 
 `critical_reasons` содержит исходные флаги модели: `criterion_id`, `reason`, `evidence` (массив диапазонов `{start,end}`). `final_critical_reasons` содержит финальные причины с `source: "model" | "reviewer"`. Если причина взята из решения проверяющего, `evidence` пуст: человек в этом API не задаёт новые диапазоны, поэтому нельзя выдавать старые ссылки модели за доказательства его решения. Старые диапазоны доступны отдельно как `original_model_evidence`.
 

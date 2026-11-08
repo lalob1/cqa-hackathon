@@ -12,7 +12,7 @@ from urllib.parse import quote, urlsplit, urlunsplit
 from urllib.request import urlopen
 
 import engine
-from engine import DEFAULT_RUBRIC, ModelError, allowed_answers, calculate, extract_records, fingerprint, read_json, require, score_conversation, validate_judgments, validate_rubric
+from engine import DEFAULT_RUBRIC, ModelError, allowed_answers, calculate, extract_records, fingerprint, read_json, require, score_conversation, validate_assessment, validate_rubric
 from results_io import validate_runs
 
 
@@ -74,23 +74,30 @@ def _run_batch(args):
     if getattr(args, "resume", False):
         require(Path(args.output).is_file(), "Resume requires an existing output checkpoint.")
         output = validate_checkpoint(read_json(args.output), records, rubric, manifest)
-    completed = {row["conversation_id"] for row in output["results"]}
+    saved = {row["conversation_id"]: row for row in output["results"]}
     # An interrupt before the first response still leaves a recoverable manifest.
     write_json(args.output, output)
     for index, conversation in enumerate(records, 1):
         cid = conversation["conversation_id"]
-        if cid in completed:
+        previous = saved.get(cid)
+        if previous is not None and previous.get("status") != "needs_review":
             print(f"{index}/{len(records)} reused", flush=True)
             continue
-        output["errors"] = [row for row in output["errors"] if row["conversation_id"] != cid]
         try:
-            output["results"].append(score_conversation(conversation, rubric))
-            print(f"{index}/{len(records)} scored", flush=True)
+            result = score_conversation(conversation, rubric)
         except ModelError as error:
-            output["errors"].append({"conversation_id": conversation["conversation_id"], "error": str(error)})
-            print(f"{index}/{len(records)} failed", flush=True)
+            if previous is None:
+                output["errors"] = [row for row in output["errors"] if row["conversation_id"] != cid]
+                output["errors"].append({"conversation_id": cid, "error": str(error)})
+            detail = "failed; previous partial findings retained" if previous is not None else "failed"
+        else:
+            output["errors"] = [row for row in output["errors"] if row["conversation_id"] != cid]
+            saved[cid] = result
+            output["results"] = list(saved.values())
+            detail = "needs review" if result.get("status") == "needs_review" else "scored"
+        print(f"{index}/{len(records)} {detail}", flush=True)
         write_json(args.output, output)
-    return 1 if output["errors"] else 0
+    return 1 if output["errors"] or any(row.get("status") == "needs_review" for row in saved.values()) else 0
 
 
 def numbered_turns(conversation):
@@ -140,8 +147,6 @@ def validate_checkpoint(payload, records, rubric, manifest):
         require(audit.get("provider") == manifest["provider"] and audit.get("prompt") == manifest["prompt"]
                 and audit.get("settings_sha256") == manifest["settings_sha256"]
                 and audit.get("settings") == manifest["settings"], "Checkpoint inference settings changed.")
-        judgments = validate_judgments(row.get("judgments"), rubric, len(turns))
-        row["score"] = calculate(rubric, {key: value["answer"] for key, value in judgments.items()})
     for row in output["errors"]:
         require(isinstance(row, dict) and row.get("conversation_id") in by_id
                 and row["conversation_id"] not in seen and isinstance(row.get("error"), str) and row["error"].strip(),
@@ -250,12 +255,12 @@ def compare(results, labels, rubric, records=None):
         calculate(rubric, answers)
     require(isinstance(results, list), "Expected a list of prediction results.")
     dataset = {row["conversation_id"]: row for row in extract_records(records)} if records is not None else None
-    by_id = {}
+    by_id, partial_ids = {}, set()
     rubric_hash = fingerprint(rubric)
     for row in results:
         require(isinstance(row, dict) and isinstance(row.get("conversation_id"), str), "Invalid prediction result.")
         cid = row["conversation_id"]
-        require(cid not in by_id, "Predictions contain duplicate conversation IDs.")
+        require(cid not in by_id and cid not in partial_ids, "Predictions contain duplicate conversation IDs.")
         require(isinstance(row.get("audit"), dict) and row["audit"].get("rubric_sha256") == rubric_hash,
                 "Predictions use a different rubric.")
         if "rubric" in row:
@@ -270,9 +275,14 @@ def compare(results, labels, rubric, records=None):
             count = len(turns)
         else:
             count = 500  # Syntax bound only; supply --dataset to verify actual message ranges.
-        validate_judgments(row.get("judgments"), rubric, count)
-        by_id[cid] = row
+        validate_assessment(row, rubric, count)
+        if row.get("status") == "needs_review":
+            partial_ids.add(cid)
+        else:
+            by_id[cid] = row
     report = _metrics(by_id, labels, rubric)
+    report["needs_review_ids"] = sorted(partial_ids)
+    report["unexpected_ids"] = sorted(set(report["unexpected_ids"]) | (partial_ids - labels.keys()))
     report["metric_scope"] = "Team diagnostics on matched human-labelled dialogs; not the official ranking formula."
     report["evidence_checked_against_dataset"] = dataset is not None
     if dataset is not None:

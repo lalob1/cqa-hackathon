@@ -63,6 +63,31 @@ class BatchTests(unittest.TestCase):
         self.assertEqual(score.call_count, 1)
         self.assertEqual(engine.read_json(self.output)["errors"], [])
 
+    def test_resume_keeps_partial_findings_until_replaced_and_excludes_them_from_metrics(self):
+        complete = result_for(self.records[0])
+        partial = copy.deepcopy(complete)
+        del partial["judgments"]["closing"]
+        partial.update(status="needs_review", criterion_errors={"closing": "No acceptable evidence."})
+        partial["score"] = engine.calculate(engine.DEFAULT_RUBRIC,
+                                           {key: row["answer"] for key, row in partial["judgments"].items()},
+                                           allow_partial=True)
+        results = [partial, *[result_for(row) for row in self.records[1:]]]
+        with patch.object(batch, "score_conversation", side_effect=results):
+            self.assertEqual(batch.run_batch(self.args), 1)
+        labels = {row["conversation_id"]: dict(ANSWERS) for row in self.records}
+        report = batch.compare(results, labels, engine.DEFAULT_RUBRIC, self.records)
+        self.assertEqual(report["coverage"], 2 / 3)
+        self.assertEqual(report["needs_review_ids"], [partial["conversation_id"]])
+        self.args.resume = True
+        with patch.object(batch, "score_conversation", side_effect=engine.ModelError("Unavailable")) as score:
+            self.assertEqual(batch.run_batch(self.args), 1)
+        self.assertEqual(score.call_count, 1)
+        self.assertEqual(engine.read_json(self.output)["results"][0], partial)
+        with patch.object(batch, "score_conversation", return_value=complete) as score:
+            self.assertEqual(batch.run_batch(self.args), 0)
+        self.assertEqual(score.call_count, 1)
+        self.assertEqual(engine.read_json(self.output)["results"][0], complete)
+
     def test_resume_rejects_changed_input_model_and_old_checkpoint(self):
         with patch.object(batch, "score_conversation", side_effect=lambda row, _: result_for(row)):
             batch.run_batch(self.args)

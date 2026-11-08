@@ -131,7 +131,30 @@ class GroundingTests(unittest.TestCase):
             engine.validate_operator_evidence(judgment, rubric, self.conversation)
         self.conversation['transcript'].insert(2, self.conversation['transcript'].pop())
         rubric, judgment = self.criterion('identity', 'yes', 4)
+        with self.assertRaisesRegex(ValueError, 'cite the actual verification confirmation'):
+            engine.validate_operator_evidence(judgment, rubric, self.conversation)
+        rubric, judgment = self.criterion('identity', 'yes', 3)
         engine.validate_operator_evidence(judgment, rubric, self.conversation)
+
+    def test_required_verification_with_system_confirmation_is_not_na(self):
+        cases = (
+            ("RU", "Нужно подтвердить вашу личность для проверки платежа.", "Личность клиента подтверждена."),
+            ("KZ", "Жеке басыңызды растау қажет.", "Клиенттің жеке басы расталды."),
+            ("EN", "Identity verification is required.", "Identity verified."),
+        )
+        for language, operator, system in cases:
+            with self.subTest(language=language):
+                self.conversation["language"] = language
+                self.conversation["transcript"][2]["text"] = operator
+                self.conversation["transcript"][3:] = [{"timestamp": "00:03", "speaker": "system", "text": system}]
+                rubric, judgment = self.criterion("identity", "na", 3)
+                with self.assertRaisesRegex(ValueError, "required verification is confirmed"):
+                    engine.validate_operator_evidence(judgment, rubric, self.conversation)
+                rubric, judgment = self.criterion("identity", "yes", 4)
+                engine.validate_operator_evidence(judgment, rubric, self.conversation)
+                self.conversation["transcript"][3]["speaker"] = "bot"
+                rubric, judgment = self.criterion("identity", "na", 3)
+                engine.validate_operator_evidence(judgment, rubric, self.conversation)
 
 
 if __name__ == "__main__":

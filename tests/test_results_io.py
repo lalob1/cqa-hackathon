@@ -151,6 +151,17 @@ class SubmissionTests(unittest.TestCase):
         self.assertEqual(row["criteria"][0]["evidence_turns"], [1, 2])
         self.assertEqual(row["score"], {"final_score": 85.38, "critical_flag": True})
 
+    def test_partial_run_is_an_error_in_competition_export(self):
+        result = self.payload["results"][0]
+        del result["judgments"]["closing"]
+        result.update(status="needs_review", criterion_errors={"closing": "No acceptable evidence."})
+        output = make_submission(self.payload, self.records, "prod", "Test Team")
+        row = output["results"][0]
+        self.assertEqual(row["status"], "error")
+        self.assertIsNone(row["score"])
+        self.assertEqual(row["criteria"], [])
+        self.assertIn("closing", row["error"])
+
     def test_failed_and_missing_results_remain_in_dataset_order(self):
         self.payload["results"] = self.payload["results"][:1]
         self.payload["errors"] = [{"conversation_id": "prod-002", "error": "Timeout"}]

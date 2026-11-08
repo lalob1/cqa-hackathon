@@ -141,7 +141,8 @@ class WorkflowStore:
             appeals.append(item)
         return {"run_id": run_id, "conversation": json.loads(row["conversation_json"]),
                 "original": original, "appeals": appeals, "final_answers": answers,
-                "final_score": calculate(original["rubric"], answers), "revision": row["revision"],
+                "final_score": calculate(original["rubric"], answers, allow_partial=original.get("status") == "needs_review"),
+                "revision": row["revision"],
                 "stored_at": row["stored_at"]}
 
     def get_run(self, run_id):
@@ -186,7 +187,7 @@ class WorkflowStore:
             return self._load(db, run_id)
 
     def list_runs(self, filter_name="all", conversation_id=None, latest=True, limit=100, offset=0):
-        require(filter_name in ("all", "critical", "final-critical", "appeal"), "Неизвестный фильтр запусков.")
+        require(filter_name in ("all", "critical", "final-critical", "appeal", "needs-review"), "Неизвестный фильтр запусков.")
         require(type(latest) is bool, "latest должен быть true или false.")
         require(type(limit) is int and 1 <= limit <= 500 and type(offset) is int and offset >= 0, "Неверные limit/offset.")
         require(conversation_id is None or filled(conversation_id, 200), "Неверный conversation_id.")
@@ -205,6 +206,7 @@ class WorkflowStore:
             for row in db.execute(query, args).fetchall():
                 run = self._load(db, row["run_id"])
                 original = run["original"]
+                status = original.get("status", "complete")
                 original_flag = any(original["score"]["flags"].values())
                 final_flag = any(run["final_score"]["flags"].values())
                 pending = sum(a["status"] == "open" for a in run["appeals"])
@@ -214,14 +216,16 @@ class WorkflowStore:
                     continue
                 if filter_name == "appeal" and not pending:
                     continue
+                if filter_name == "needs-review" and status != "needs_review":
+                    continue
                 flags = [{"criterion_id": item["id"], "reason": original["judgments"][item["id"]]["reason"],
                           "evidence": original["judgments"][item["id"]]["evidence"]}
                          for item in original["rubric"] if item["type"] == "flag"
-                         and original["judgments"][item["id"]]["answer"] == "yes"]
+                         and original["judgments"].get(item["id"], {}).get("answer") == "yes"]
                 final_flags = []
                 for item in original["rubric"]:
                     key = item["id"]
-                    if item["type"] != "flag" or run["final_answers"][key] != "yes":
+                    if item["type"] != "flag" or run["final_answers"].get(key) != "yes":
                         continue
                     decision = next((a["decision"] for a in reversed(run["appeals"])
                                      if a["criterion_id"] == key and a["decision"]), None)
@@ -232,6 +236,7 @@ class WorkflowStore:
                                         "evidence": [] if decision else original["judgments"][key]["evidence"],
                                         "original_model_evidence": original["judgments"][key]["evidence"]})
                 summaries.append({"run_id": run["run_id"], "conversation_id": original["conversation_id"],
+                                  "status": status,
                                   "language": run["conversation"]["language"], "channel": run["conversation"]["channel"],
                                   "original_score": original["score"]["total"], "final_score": run["final_score"]["total"],
                                   "original_critical": original_flag, "final_critical": final_flag,
@@ -250,7 +255,7 @@ def main():
     imp.add_argument("--input", required=True)
     imp.add_argument("--dataset", required=True)
     listing = commands.add_parser("list")
-    listing.add_argument("--filter", default="all", choices=("all", "critical", "final-critical", "appeal"))
+    listing.add_argument("--filter", default="all", choices=("all", "critical", "final-critical", "appeal", "needs-review"))
     listing.add_argument("--all-runs", action="store_true")
     listing.add_argument("--limit", type=int, default=100)
     listing.add_argument("--offset", type=int, default=0)

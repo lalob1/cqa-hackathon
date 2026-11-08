@@ -12,7 +12,7 @@ from pathlib import Path
 
 from engine import (DEFAULT_RUBRIC, calculate, extract_records, filled,
                     fingerprint, model_name, provider_name, read_json,
-                    require, validate_judgments, validate_rubric)
+                    require, validate_assessment, validate_operator_evidence, validate_rubric)
 
 CANONICAL_IDS = {
     "greeting": "contact", "needs": "discovery", "identity": "identification",
@@ -67,7 +67,10 @@ def validate_runs(payload, records, allow_empty=False):
                 "Неизвестный или повторяющийся ID результата.")
         seen.add(cid)
         rubric = validate_rubric(raw.get("rubric"))
-        judgments = validate_judgments(raw.get("judgments"), rubric, len(by_id[cid]["transcript"]))
+        judgments = validate_assessment(raw, rubric, len(by_id[cid]["transcript"]))
+        partial = raw.get("status") == "needs_review"
+        if partial:
+            validate_operator_evidence(judgments, [item for item in rubric if item["id"] in judgments], by_id[cid])
         audit = raw.get("audit")
         require(isinstance(audit, dict), f"{cid}: отсутствует audit.")
         require(filled(audit.get("model"), 500) and filled(audit.get("created_at"), 100),
@@ -96,7 +99,7 @@ def validate_runs(payload, records, allow_empty=False):
         require(audit.get("rubric_sha256") == rubric_hash, f"{cid}: хеш чек-листа не совпадает.")
         require(batch_hash is None or batch_hash == rubric_hash, f"{cid}: чек-лист отличается от пакета.")
         result = copy.deepcopy(raw)
-        result["score"] = calculate(rubric, {key: row["answer"] for key, row in judgments.items()})
+        result["score"] = calculate(rubric, {key: row["answer"] for key, row in judgments.items()}, allow_partial=partial)
         normalized.append(result)
     for raw in errors:
         require(isinstance(raw, dict), "Ошибка обработки должна быть объектом.")
@@ -145,6 +148,11 @@ def make_submission(payload, records, group, team_name):
         if result is None:
             output["results"].append({"conversation_id": cid, "status": "error", "criteria": [],
                                       "score": None, "error": errors.get(cid, "Нет сохранённого результата оценки.")})
+            continue
+        if result.get("status") == "needs_review":
+            missing = ", ".join(result["criterion_errors"])
+            output["results"].append({"conversation_id": cid, "status": "error", "criteria": [],
+                                      "score": None, "error": f"Требуется проверка критериев: {missing}."})
             continue
         criteria = []
         for internal_id, official_id in CANONICAL_IDS.items():

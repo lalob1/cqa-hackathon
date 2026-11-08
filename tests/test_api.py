@@ -10,7 +10,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import app
-from engine import ModelError
+from engine import DEFAULT_RUBRIC, ModelError, score_conversation
 from test_workflow import run_fixture
 from workflow import WorkflowStore
 
@@ -94,6 +94,72 @@ class APITests(unittest.TestCase):
         status, _ = self.request("/api/import-results", {"records": [self.conversation], "payload": payload})
         self.assertEqual(status, 400)
         self.assertEqual(self.store.list_runs(latest=False)["total"], 1)
+
+    def test_partial_score_preserves_critical_evidence_through_review_and_reload(self):
+        rubric = [item for item in DEFAULT_RUBRIC if item["id"] in ("greeting", "closing", "critical")]
+        conversation = {"conversation_id": "partial", "channel": "agent chat", "language": "EN",
+                        "audio_url": None, "transcript": [
+                            {"timestamp": "00:00", "speaker": "client", "text": "Where is my report?"},
+                            {"timestamp": "00:01", "speaker": "bot", "text": "Hello, I am the bot."},
+                            {"timestamp": "00:02", "speaker": "operator", "text": "Use the app. I charge for private advice."},
+                            {"timestamp": "00:03", "speaker": "system", "text": "Chat closed by operator."}]}
+        evidence = [{"start": 3, "end": 3}]
+        rows = {"greeting": {"answer": "no", "reason": "No operator greeting.", "evidence": evidence},
+                "closing": {"answer": "na", "reason": "The client disconnected.", "evidence": evidence},
+                "critical": {"answer": "yes", "reason": "Operator offered private paid advice.", "evidence": evidence}}
+        calls = []
+
+        def chat(_, schema):
+            calls.append(schema["required"])
+            judgments = {key: rows[key] for key in schema["required"]}
+            if len(calls) == 1:
+                judgments["greeting"] = {"answer": "yes", "reason": "The bot greeted the client.",
+                                         "evidence": [{"start": 2, "end": 2}]}
+            return {"message": {"content": json.dumps(judgments)}}
+
+        with patch.object(app, "score_conversation", side_effect=lambda c, r: score_conversation(c, r, chat)):
+            status, scored = self.request("/api/score", {"conversation": conversation, "rubric": rubric})
+        self.assertEqual(status, 200)
+        self.assertEqual(calls, [["greeting", "closing", "critical"], ["greeting", "closing"]])
+        self.assertEqual(scored["status"], "needs_review")
+        self.assertEqual(set(scored["judgments"]), {"greeting", "critical"})
+        self.assertEqual(scored["judgments"]["greeting"], rows["greeting"])
+        self.assertIn("explicitly chose to end", scored["criterion_errors"]["closing"])
+        self.assertEqual(scored["score"], {"total": None, "criteria": {}, "flags": {"critical": True}, "sections": {}})
+        rid = scored["run_id"]
+        for filter_name in ("critical", "final-critical", "needs-review"):
+            status, listed = self.request(f"/api/runs?filter={filter_name}")
+            self.assertEqual(status, 200)
+            summary, = listed["results"]
+            self.assertEqual(summary["status"], "needs_review")
+            self.assertEqual(summary["critical_reasons"][0]["evidence"], evidence)
+            self.assertIsNone(summary["final_score"])
+
+        imported = copy.deepcopy(scored)
+        imported["score"]["total"] = 100
+        status, response = self.request("/api/import-results", {"records": [conversation], "payload": {"results": [imported]}})
+        self.assertEqual(status, 200)
+        self.assertEqual(response["run_ids"], [rid])
+        self.assertIsNone(response["results"][0]["score"]["total"])
+        imported["criterion_errors"] = {}
+        status, _ = self.request("/api/import-results", {"records": [conversation], "payload": {"results": [imported]}})
+        self.assertEqual(status, 400)
+
+        status, _ = self.request("/api/appeals", {"run_id": rid, "criterion_id": "closing",
+                                                 "message": "Review missing answer.", "expected_revision": 0})
+        self.assertEqual(status, 400)
+        status, opened = self.request("/api/appeals", {"run_id": rid, "criterion_id": "critical",
+                                                       "message": "Review this evidence.", "expected_revision": 0})
+        self.assertEqual(status, 200)
+        status, reviewed = self.request("/api/reviews", {"run_id": rid, "appeal_id": opened["appeals"][0]["appeal_id"],
+                                                         "answer": "yes", "reason": "Turn 3 contains the offer.", "expected_revision": 1})
+        self.assertEqual(status, 200)
+        self.assertIsNone(reviewed["final_score"]["total"])
+        status, restored = self.request("/api/runs/" + rid)
+        self.assertEqual(status, 200)
+        self.assertEqual(restored["revision"], 2)
+        self.assertEqual(restored["original"]["judgments"]["critical"]["evidence"], evidence)
+        self.assertTrue(restored["final_score"]["flags"]["critical"])
 
     def test_export_routes_missing_results_as_errors(self):
         records = []

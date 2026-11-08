@@ -65,7 +65,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if path == "/api/config":
                 self.send_json(200, {"rubric": DEFAULT_RUBRIC, "model": model_name(), "provider": provider_name(),
-                                     "features": ["run_history", "appeals", "critical_filter", "batch_import", "submission_export"]})
+                                     "features": ["run_history", "appeals", "critical_filter", "batch_import", "submission_export", "partial_review"]})
             elif path == "/api/health":
                 self.send_json(200, {"server": "ok", "model": {"name": model_name(), "provider": provider_name(),
                                                                "availability": "not_checked"}})

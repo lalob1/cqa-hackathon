@@ -155,8 +155,29 @@ class EngineReliabilityTests(unittest.TestCase):
                 data['kept']['answer'] = 'no'
             return response(data)
 
-        with self.assertRaisesRegex(engine.ModelError, 'лишних'):
-            engine.score_conversation(CONVERSATION, [RUBRIC[0], second], chat)
+        result = engine.score_conversation(CONVERSATION, [RUBRIC[0], second], chat)
+        self.assertEqual(result["status"], "needs_review")
+        self.assertEqual(result["judgments"], {"kept": JUDGMENTS["custom"]})
+        self.assertEqual(set(result["criterion_errors"]), {"custom"})
+        self.assertIn("лишних", result["criterion_errors"]["custom"])
+        self.assertIsNone(result["score"]["total"])
+
+    def test_transport_failure_during_repair_preserves_accepted_findings(self):
+        second = {**RUBRIC[0], "id": "missing"}
+        calls = []
+
+        def chat(messages, schema):
+            calls.append(schema["required"])
+            if len(calls) == 2:
+                raise engine.ModelError("Local model timed out")
+            return response()
+
+        result = engine.score_conversation(CONVERSATION, [RUBRIC[0], second], chat)
+        self.assertEqual(calls, [["custom", "missing"], ["missing"]])
+        self.assertEqual(result["status"], "needs_review")
+        self.assertEqual(result["judgments"], JUDGMENTS)
+        self.assertIn("модель не вернула оценку", result["criterion_errors"]["missing"])
+        self.assertIn("Local model timed out", result["criterion_errors"]["missing"])
 
     def test_truncation_is_never_accepted_even_if_json_looks_valid(self):
         for extra in ({"done_reason": "length"}, {"finish_reason": "length"},

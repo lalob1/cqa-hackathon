@@ -182,6 +182,8 @@ function openRecord(index) {
   } else if (run && (filter === "critical" || filter === "final-critical")) {
     const score = filter === "critical" ? run.original.score : finalScoreFor(run);
     criterion = Object.keys(score.flags).find(id => score.flags[id]);
+  } else if (run && filter === "needs-review") {
+    criterion = Object.keys(run.original.criterion_errors)[0];
   }
   showView("review", criterion ? "score" : "dialogue");
   if (criterion) {
@@ -243,7 +245,8 @@ async function importResults(payload) {
       }
     }
     selectRecord(selected);
-    persist("Оценок в файле: " + checked.results.length + " · новых: "
+    const incomplete = checked.results.filter(run => run.status === "needs_review").length;
+    persist("Оценок в файле: " + checked.results.length + " · требуют проверки: " + incomplete + " · новых: "
       + checked.run_ids.filter(id => !known.has(id)).length + " · ошибок: " + checked.errors.length);
     showView("dialogues");
   } finally {
@@ -286,6 +289,7 @@ function renderList() {
     const run = workspace.runs[index]?.at(-1);
     if (!(conversation.conversation_id + " " + conversation.language).toLowerCase().includes(search)) continue;
     const final = run && finalScoreFor(run);
+    const incomplete = run?.original.status === "needs_review";
     const originalCritical = run && Object.values(run.original.score.flags).some(Boolean);
     const finalCritical = final && Object.values(final.flags).some(Boolean);
     const openAppeals = run ? run.original.rubric.reduce((count, item) => count
@@ -294,6 +298,7 @@ function renderList() {
     if (filter === "final-critical" && !finalCritical) continue;
     if (filter === "appeal" && !openAppeals) continue;
     if (filter === "pending" && run) continue;
+    if (filter === "needs-review" && !incomplete) continue;
     const button = node("button", undefined, "record paper-record");
     button.type = "button";
     button.dataset.recordIndex = String(index);
@@ -305,8 +310,9 @@ function renderList() {
       node("span", conversation.language, "record-meta"));
     const end = node("span", undefined, "record-end");
     if (run) {
-      end.append(node("span", scoreText(final.total), "record-score"));
+      if (!incomplete) end.append(node("span", scoreText(final.total), "record-score"));
       const flags = node("span", undefined, "record-flags");
+      if (incomplete) flags.append(node("span", "Требуется проверка", "record-state"));
       if (finalCritical) flags.append(node("span", originalCritical ? "Грубая ошибка ИИ" : "Ошибка после пересмотра", "record-state attention"));
       else if (originalCritical) flags.append(node("span", "Флаг ИИ снят", "record-state"));
       if (openAppeals) flags.append(node("span", "Апелляций: " + openAppeals, "record-state appeal-state"));
@@ -460,23 +466,30 @@ function reviewForm(run, item, prior, current) {
 
 function renderCriterion(run, item, finalScore, opened) {
   const original = run.original.judgments[item.id];
-  const appeals = criterionAppeals(run, item.id);
-  const appeal = appeals.findLast(a => a.status === 'open');
-  const current = run.final_answers?.[item.id] ?? appeals.at(-1)?.decision?.answer ?? original.answer;
   const row = node("details", undefined, "criterion");
   row.open = opened;
   row.dataset.criterionId = item.id;
   const summary = node("summary");
+  const detail = node("div", undefined, "criterion-body");
+  row.append(summary, detail);
+  summary.append(node("span", item.title, "criterion-title"));
+  if (!original) {
+    summary.append(node("span", "Требуется проверка", "answer skip"));
+    const validation = node("details");
+    validation.append(node("summary", "Подробности проверки"), node("p", run.original.criterion_errors[item.id], "meta"));
+    detail.append(node("p", "По этому критерию модель не вернула ответ, прошедший проверку."), validation);
+    return row;
+  }
+  const appeals = criterionAppeals(run, item.id);
+  const appeal = appeals.findLast(a => a.status === 'open');
+  const current = run.final_answers?.[item.id] ?? appeals.at(-1)?.decision?.answer ?? original.answer;
   const tone = item.type === "flag" ? (current === "yes" ? "fail" : "skip")
     : {yes: "pass", no: "fail", na: "skip"}[current] ?? "number";
-  summary.append(node("span", item.title, "criterion-title"));
   if (appeal) summary.append(node("span", "Апелляция", "criterion-appeal"));
   summary.append(node("span", answerText(current), "answer " + tone));
-  row.append(summary);
   const points = finalScore.criteria[item.id];
-  const weight = item.type === "flag" ? "Отдельный флаг" :
-    "Вес " + item.weight + " · начислено " + scoreText(points.points) + " из " + scoreText(points.effective_weight);
-  const detail = node("div", undefined, "criterion-body");
+  const weight = item.type === "flag" ? "Отдельный флаг" : "Вес " + item.weight
+    + (points ? " · начислено " + scoreText(points.points) + " из " + scoreText(points.effective_weight) : "");
   detail.append(node("p", weight, "meta"), node("p", original.reason, "criterion-reason"));
   detail.append(node("p", "Ответ ИИ: " + answerText(original.answer), "meta"));
   const evidence = node("div", undefined, "evidence-links");
@@ -504,7 +517,6 @@ function renderCriterion(run, item, finalScore, opened) {
     panel.append(node('summary', appeal ? 'Рассмотреть апелляцию' : (appeals.length ? 'Подать новую апелляцию' : 'Оспорить оценку')),
       reviewForm(run, item, appeal, current)); detail.append(panel);
   }
-  row.append(detail);
   return row;
 }
 
@@ -518,7 +530,8 @@ function renderResult(openCriterion, reveal = false) {
   $("history").replaceChildren();
   for (const [index, entry] of runs.entries()) {
     const time = new Date(entry.original.audit.created_at).toLocaleString("ru", {dateStyle: "short", timeStyle: "short"});
-    const option = node("option", time + " · " + scoreText(finalScoreFor(entry).total) + (entry.run_id ? "" : " · локально"));
+    const outcome = entry.original.status === "needs_review" ? "требуется проверка" : scoreText(finalScoreFor(entry).total);
+    const option = node("option", time + " · " + outcome + (entry.run_id ? "" : " · локально"));
     option.value = index;
     option.selected = index === historyIndex;
     $("history").append(option);
@@ -542,21 +555,28 @@ function renderResult(openCriterion, reveal = false) {
     dismiss.addEventListener('click', () => { delete workspace.conflictDrafts[run.run_id]; cacheWorkspace(); draft.remove(); });
     draft.append(dismiss); pane.append(draft);
   }
-  const totals = node("div", undefined, "totals");
-  const total = node("div", undefined, "final-total");
-  const value = node("div", undefined, "total-value");
-  value.append(node("strong", scoreText(final.total)), node("small", " / 100"));
-  total.append(node("span", "Итоговая оценка", "total-label"), value);
-  const initial = node("p", undefined, "original-total");
-  initial.append(node("span", "Исходная оценка ИИ"), node("strong", scoreText(original.score.total)));
-  const meter = scoreMeter(final.total);
-  totals.append(total, meter, initial);
-  pane.append(totals);
-  if (reveal) {
-    totals.animate([{opacity: .65, transform: "translateY(5px)"}, {opacity: 1, transform: "translateY(0)"}],
-      {duration: 240, easing: "ease-out"});
-    meter.querySelector(".meter-value").animate([{strokeDashoffset: "100"}, {strokeDashoffset: String(100 - (final.total ?? 0))}],
-      {duration: 720, easing: "cubic-bezier(.2,.75,.3,1)"});
+  if (original.status === "needs_review") {
+    const notice = node("div", undefined, "empty-result");
+    notice.append(node("strong", "Требуется проверка"),
+      node("p", "Итоговый балл недоступен. Ниже показаны ответы, прошедшие проверку, и критерии, которые требуют внимания."));
+    pane.append(notice);
+  } else {
+    const totals = node("div", undefined, "totals");
+    const total = node("div", undefined, "final-total");
+    const value = node("div", undefined, "total-value");
+    value.append(node("strong", scoreText(final.total)), node("small", " / 100"));
+    total.append(node("span", "Итоговая оценка", "total-label"), value);
+    const initial = node("p", undefined, "original-total");
+    initial.append(node("span", "Исходная оценка ИИ"), node("strong", scoreText(original.score.total)));
+    const meter = scoreMeter(final.total);
+    totals.append(total, meter, initial);
+    pane.append(totals);
+    if (reveal) {
+      totals.animate([{opacity: .65, transform: "translateY(5px)"}, {opacity: 1, transform: "translateY(0)"}],
+        {duration: 240, easing: "ease-out"});
+      meter.querySelector(".meter-value").animate([{strokeDashoffset: "100"}, {strokeDashoffset: String(100 - (final.total ?? 0))}],
+        {duration: 720, easing: "cubic-bezier(.2,.75,.3,1)"});
+    }
   }
   const flags = Object.entries(final.flags).filter(([, value]) => value).map(([id]) => original.rubric.find((item) => item.id === id).title);
   if (flags.length) pane.append(node("p", flags.join(" · "), "flag"));
@@ -822,7 +842,8 @@ async function boot() {
       replaceRun(stored);
       if (index === selected) historyIndex = workspace.runs[index].findIndex(run => run.run_id === stored.run_id);
       reveal = index === selected;
-      persist("Оценка сохранена на сервере.");
+      persist(result.status === "needs_review"
+        ? "Доступные результаты сохранены. Требуется проверка." : "Оценка сохранена на сервере.");
       $("model").textContent = result.audit.model;
       $("model-badge").title = "Последний запрос выполнен: " + result.audit.model;
       $("model-badge").classList.add("is-ready");
