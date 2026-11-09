@@ -1,5 +1,5 @@
 # Democrats · Conversation Quality Analytics
-
+Участники: Togzhan Serik, Ibragim Abilgazy, Gulzhazira Almakhambetkyzy, Aigerim Bakytbek
 Прототип для Freedom Broker Data Challenge. Загружает транскрипты RU, KZ и EN, проверяет работу оператора по редактируемому чек-листу, показывает основания оценки и сохраняет результат пересмотра. [Передача проекта и план работ](HANDOFF.md). [Обновление серверного процесса и проверка DEV](WORKFLOW_UPDATE_RU.md).
 
 ## Быстрая проверка
